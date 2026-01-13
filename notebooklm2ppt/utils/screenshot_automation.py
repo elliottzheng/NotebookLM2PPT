@@ -18,10 +18,58 @@ import win32api
 import win32gui
 import win32con
 from pywinauto import mouse, keyboard
-
+from pathlib import Path
+from tkinter import messagebox
+import tkinter as tk
 # Get screen dimensions
 screen_width = win32api.GetSystemMetrics(0)
 screen_height = win32api.GetSystemMetrics(1)
+
+# Persistent config file to store computed done-button offset (one integer)
+_DONE_OFFSET_FILE = Path.home() / ".notebooklm2ppt_done_offset"
+
+
+def load_saved_done_offset() -> int | None:
+    """从磁盘加载已保存的完成按钮偏移（像素），不存在时返回 None"""
+    try:
+        if _DONE_OFFSET_FILE.exists():
+            txt = _DONE_OFFSET_FILE.read_text(encoding="utf-8").strip()
+            if txt:
+                return int(txt)
+    except Exception:
+        pass
+    return None
+
+
+def save_done_offset(offset: int) -> None:
+    """将完成按钮偏移值保存到磁盘（覆盖）。"""
+    try:
+        _DONE_OFFSET_FILE.write_text(str(int(offset)), encoding="utf-8")
+        print(f"已保存完成按钮偏移到: {_DONE_OFFSET_FILE}")
+    except Exception as e:
+        print(f"保存完成按钮偏移失败: {e}")
+
+
+def _wait_for_left_click(timeout: float = 60.0):
+    """等待用户进行一次左键点击，返回点击时的屏幕坐标 (x, y)。超时返回 None。"""
+    print(f"请手动点击“完成”按钮以保存第一页（等待 {int(timeout)} 秒）...")
+    start = time.time()
+    prev_state = bool(win32api.GetAsyncKeyState(0x01) & 0x8000)
+    while time.time() - start < timeout:
+        state = bool(win32api.GetAsyncKeyState(0x01) & 0x8000)
+        # 检测按下的瞬间
+        if state and not prev_state:
+            # 记录按下时的坐标
+            x, y = win32api.GetCursorPos()
+            # 等待释放
+            while bool(win32api.GetAsyncKeyState(0x01) & 0x8000):
+                time.sleep(0.01)
+            print(f"检测到左键点击坐标: {x}, {y}")
+            return x, y
+        prev_state = state
+        time.sleep(0.01)
+    print("等待用户点击超时。")
+    return None
 
 
 def get_ppt_windows():
@@ -224,6 +272,24 @@ def _compute_done_button_offset(pc_manager_version: str | None, fallback: int) -
     return fallback
 
 
+
+
+def create_topmost_dialog():    
+    # 创建一个简单的Tkinter窗口    
+    root = tk.Tk()    
+    root.withdraw()  # 隐藏主窗口    
+    # 设置窗口为置顶    
+    root.attributes("-topmost", True)   
+    msg = (
+            "正在进行按钮位置校准，需要您的一次交互确认，请仔细阅读此说明\n\n"
+            "点击“确定”后不要动鼠标，等到出现智能圈选工具栏后，请您移动鼠标手动点击“智能复制到PPT”按钮即可完整校准。\n\n"
+            "请在准备好后点击“确定”继续。转换过程中请不要最小化窗口或干扰鼠标操作。"
+    )
+    a = messagebox.askokcancel('提示', msg, parent=root)
+    root.destroy() 
+
+
+
 def take_fullscreen_snip(
     delay_before_hotkey: float = 1.0,
     drag_duration: float = 3,
@@ -233,8 +299,7 @@ def take_fullscreen_snip(
     width: int = screen_width,
     height: int = screen_height,
     done_button_right_offset: int | None = None,
-    pc_manager_version: str | None = None,
-) -> tuple:
+):
     """使用微软电脑管家的智能圈选功能进行全屏截图。
 
     Args:
@@ -249,8 +314,8 @@ def take_fullscreen_snip(
         pc_manager_version: 电脑管家版本号；3.19及以上自动使用 190，低于3.19 使用 210
     
     Returns:
-        tuple: (bool, str) - (是否成功检测到新窗口, PPT文件名)
-               如果不需要检查PPT窗口，返回 (True, None)
+        tuple: (bool, str, int|None) - (是否成功检测到新窗口, PPT文件名, 已保存的偏移或 None)
+               如果不需要检查PPT窗口，返回 (True, None, None)
     """
     
     # 记录点击前的PPT窗口和文件资源管理器窗口
@@ -263,6 +328,17 @@ def take_fullscreen_snip(
 
     # 等待用户聚焦到正确的窗口
     time.sleep(delay_before_hotkey)
+
+
+    # 简化逻辑：优先使用函数参数；如果未提供或强制重新捕获，则要求手动点击以捕获偏移并保存
+    resolved_offset = None
+    computed_offset = None
+    if done_button_right_offset is not None:
+        resolved_offset = int(done_button_right_offset)
+        print(f"使用传入的完成按钮偏移: {resolved_offset}")
+    else:
+        print("未传入完成按钮偏移，稍后将要求手动点击以捕获并保存偏移。")
+        create_topmost_dialog()
 
     # 打开微软电脑管家的智能圈选工具
     # pywinauto 使用 '^+a' 表示 Ctrl+Shift+A
@@ -277,21 +353,6 @@ def take_fullscreen_snip(
     bottom_right = (width+delta, height)
 
     center = (width // 2, height // 2)
-
-    if done_button_right_offset is not None:
-        resolved_offset = done_button_right_offset
-        offset_source = "手动指定"
-    else:
-        resolved_offset = _compute_done_button_offset(
-            pc_manager_version,
-            fallback=OFFSET_LEGACY,
-        )
-        offset_source = "版本推断/默认"
-    print(f"完成按钮偏移: {resolved_offset} ({offset_source})")
-    done_button = (bottom_right[0] - resolved_offset, height + 35)
-
-    if done_button[1] > screen_height:
-        done_button = (done_button[0], height - 35)
 
     print(bottom_right, width)
 
@@ -310,12 +371,33 @@ def take_fullscreen_snip(
 
     # Release left button
     mouse.release(button='left', coords=bottom_right)
+    # 如果没有传入偏移或强制重新捕获，则要求手动点击完成按钮以捕获偏移并保存
+    if resolved_offset is None:
+        
 
-    # Optional: Click done button (commented out in original)
-    mouse.move(coords=done_button)
-    time.sleep(1)
-    
-    mouse.click(button='left', coords=done_button)
+        
+        
+        coords = _wait_for_left_click(timeout=60)
+        if coords:
+            click_x, click_y = coords
+            computed_offset = int((bottom_right[0]) - click_x)
+            try:
+                save_done_offset(computed_offset)
+            except Exception:
+                pass
+            print(f"已计算并保存完成按钮偏移: {computed_offset}")
+            resolved_offset = computed_offset
+        else:
+            print("首次偏移捕获超时或未检测到点击，放弃操作。")
+            return False, None, None
+    else:
+        # 已有偏移，执行自动点击
+        done_button = (bottom_right[0] - resolved_offset, height + 35)
+        if done_button[1] > screen_height:
+            done_button = (done_button[0], height - 35)
+        mouse.move(coords=done_button)
+        time.sleep(1)
+        mouse.click(button='left', coords=done_button)
     
     # 检查是否出现新的PPT窗口
     if check_ppt_window:
@@ -324,9 +406,9 @@ def take_fullscreen_snip(
         # 同时检查并关闭新打开的文件资源管理器窗口（下载文件夹）
         check_and_close_download_folder(initial_explorer_windows, timeout=10)
         
-        return success, ppt_filename
+        return success, ppt_filename, computed_offset
     
-    return True, None
+    return True, None, None
 
 if __name__ == "__main__":
     from .image_viewer import show_image_fullscreen

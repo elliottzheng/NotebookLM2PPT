@@ -6,7 +6,7 @@ from spire.presentation import *
 from spire.presentation.common import *
 from pptx import Presentation as PptxPresentation
 
-def combine_ppt_files_with_spire(source_folder, output_file):
+def combine_ppt_files_with_spire(source_folder, output_file, png_names=None):
     """
     使用 Spire.Presentation 合并PPT文件，每个PPT只保留第一页，并保留原始设计
     
@@ -15,15 +15,24 @@ def combine_ppt_files_with_spire(source_folder, output_file):
         output_file: 输出的合并PPT文件路径
     """
     # 获取所有pptx文件并按字典序排序
+    
     ppt_files = sorted([f for f in os.listdir(source_folder) if f.endswith('.pptx')])
+
+    ppt_names = [png_name.replace(".png", ".pptx") for png_name in png_names] if png_names else None
     
     if not ppt_files:
         print("未找到任何PPT文件")
         return
     
     print(f"找到 {len(ppt_files)} 个PPT文件:")
+    valid_ppt_files = []
     for idx, file in enumerate(ppt_files, 1):
         print(f"  {idx}. {file}")
+        if ppt_names and file in ppt_names:
+            valid_ppt_files.append(file)
+    if ppt_names:
+        ppt_files = valid_ppt_files
+        print(f"\n根据提供的PNG名称过滤后，剩余 {len(ppt_files)} 个PPT文件:")
     
     # 创建主演示文稿对象，使用第一个PPT作为基础
     first_ppt_path = os.path.join(source_folder, ppt_files[0])
@@ -122,7 +131,7 @@ def combine_ppt_files_with_master(source_folder, output_file):
     # 释放资源
     main_pres.Dispose()
 
-def combine_ppt(source_folder, out_ppt_file):
+def combine_ppt(source_folder, out_ppt_file, png_names = None):
     # 确保是字符串路径，因为后面用到了 .replace
     source_folder = str(source_folder)
     out_ppt_file = str(out_ppt_file)
@@ -132,7 +141,7 @@ def combine_ppt(source_folder, out_ppt_file):
     print("=" * 60)
     print("方法1: 合并PPT并保留原始设计")
     print("=" * 60)
-    combine_ppt_files_with_spire(source_folder, output_file1)
+    combine_ppt_files_with_spire(source_folder, output_file1, png_names=png_names)
 
 
     ppt = PptxPresentation(output_file1)

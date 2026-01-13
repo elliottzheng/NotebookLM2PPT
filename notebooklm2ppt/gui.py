@@ -11,7 +11,7 @@ except ImportError:
 from pathlib import Path
 from .cli import process_pdf_to_ppt
 from .ppt_combiner import combine_ppt
-from .utils.screenshot_automation import screen_width, screen_height
+from .utils.screenshot_automation import screen_width, screen_height, load_saved_done_offset
 
 class TextRedirector:
     def __init__(self, widget, tag="stdout"):
@@ -32,6 +32,7 @@ class AppGUI:
         self.root = root
         self.root.title("PDF to PPT Converter")
         self.root.geometry("800x600")
+        self.root.minsize(700, 480)
         
         self.setup_ui()
         
@@ -81,28 +82,32 @@ class AppGUI:
     def setup_ui(self):
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
+        main_frame.columnconfigure(0, weight=1)
 
         # File Selection
         file_frame = ttk.LabelFrame(main_frame, text="文件设置 (支持拖拽 PDF 文件到窗口)", padding="10")
         file_frame.pack(fill=tk.X, pady=5)
+        file_frame.columnconfigure(1, weight=1)
 
         ttk.Label(file_frame, text="PDF 文件:").grid(row=0, column=0, sticky=tk.W)
         self.pdf_path_var = tk.StringVar()
         pdf_entry = ttk.Entry(file_frame, textvariable=self.pdf_path_var, width=60)
-        pdf_entry.grid(row=0, column=1, padx=5)
+        pdf_entry.grid(row=0, column=1, padx=5, sticky="ew")
         self.add_context_menu(pdf_entry)
         ttk.Button(file_frame, text="浏览", command=self.browse_pdf).grid(row=0, column=2)
 
         ttk.Label(file_frame, text="输出目录:").grid(row=1, column=0, sticky=tk.W, pady=5)
         self.output_dir_var = tk.StringVar(value="workspace")
         output_entry = ttk.Entry(file_frame, textvariable=self.output_dir_var, width=60)
-        output_entry.grid(row=1, column=1, padx=5, pady=5)
+        output_entry.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
         self.add_context_menu(output_entry)
         ttk.Button(file_frame, text="浏览", command=self.browse_output).grid(row=1, column=2, pady=5)
 
         # Options
         opt_frame = ttk.LabelFrame(main_frame, text="转换选项", padding="10")
         opt_frame.pack(fill=tk.X, pady=5)
+        opt_frame.columnconfigure(1, weight=1)
+        opt_frame.columnconfigure(3, weight=1)
 
         ttk.Label(opt_frame, text="DPI:").grid(row=0, column=0, sticky=tk.W)
         self.dpi_var = tk.IntVar(value=150)
@@ -128,21 +133,35 @@ class AppGUI:
         ratio_entry.grid(row=1, column=1, sticky=tk.W, padx=5, pady=5)
         self.add_context_menu(ratio_entry)
 
+        # 将页范围放到单独的行，避免与偏移提示重叠
+        ttk.Label(opt_frame, text="页范围:").grid(row=5, column=0, sticky=tk.W, padx=10, pady=5)
+        self.page_range_var = tk.StringVar(value="")
+        page_range_entry = ttk.Entry(opt_frame, textvariable=self.page_range_var, width=30)
+        page_range_entry.grid(row=5, column=1, columnspan=3, sticky="ew", padx=5, pady=5)
+        self.add_context_menu(page_range_entry)
+        ttk.Label(opt_frame, text="示例: 1-3,5,7- (与 Word 打印页范围一致)", wraplength=420).grid(row=6, column=0, columnspan=4, sticky=tk.W)
+
         self.inpaint_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(opt_frame, text="启用图像修复 (去水印)", variable=self.inpaint_var).grid(row=1, column=2, columnspan=2, sticky=tk.W, padx=10)
 
-        ttk.Label(opt_frame, text="电脑管家版本:").grid(row=1, column=4, sticky=tk.W, padx=10)
-        self.pc_mgr_version_var = tk.StringVar(value="3.19")
-        pc_mgr_entry = ttk.Entry(opt_frame, textvariable=self.pc_mgr_version_var, width=10)
-        pc_mgr_entry.grid(row=1, column=5, sticky=tk.W, padx=5)
-        self.add_context_menu(pc_mgr_entry)
 
         ttk.Label(opt_frame, text="转换按钮偏移:").grid(row=2, column=0, sticky=tk.W, pady=5)
         self.done_offset_var = tk.StringVar(value="")
         done_offset_entry = ttk.Entry(opt_frame, textvariable=self.done_offset_var, width=10)
         done_offset_entry.grid(row=2, column=1, sticky=tk.W, padx=5, pady=5)
         self.add_context_menu(done_offset_entry)
-        ttk.Label(opt_frame, text="留空按版本自动，填数字优先使用，如果发现点不到转换按钮可以微调").grid(row=2, column=2, columnspan=4, sticky=tk.W)
+        # 显示已保存的偏移（不作为手动覆盖输入）
+        self.saved_offset_var = tk.StringVar(value="")
+        ttk.Label(opt_frame, textvariable=self.saved_offset_var).grid(row=2, column=2, sticky=tk.W, padx=5)
+        # 将长说明放到独立一行，跨越所有列并允许横向扩展与自动换行
+        ttk.Label(opt_frame, text="该数值表示从右下角到转换按钮的像素偏移(从右往左)，留空则在无已保存偏移时强制按钮位置校准；填数字将作为手动覆盖。", wraplength=640).grid(row=3, column=0, columnspan=6, sticky="ew", pady=2)
+
+        # 首次校准选项：允许用户在第一页手动点击完成按钮以捕获偏移并保存
+        # 如果磁盘已有保存偏移，默认关闭首次校准；否则默认开启
+        self.calibrate_var = tk.BooleanVar(value=True)
+
+        ttk.Checkbutton(opt_frame, text="按钮位置校准（若无已保存偏移则默认开启）", variable=self.calibrate_var).grid(row=4, column=0, columnspan=4, sticky=tk.W, pady=5)
+        self.load_offset_from_disk()
 
         # Control
         ctrl_frame = ttk.Frame(main_frame, padding="10")
@@ -201,6 +220,24 @@ class AppGUI:
         self.start_btn.config(state=tk.DISABLED)
         threading.Thread(target=self.run_conversion, daemon=True).start()
 
+    def load_offset_from_disk(self):
+        # 从磁盘加载已保存的偏移并更新显示
+        try:
+            saved = load_saved_done_offset()
+        except Exception:
+            saved = None
+        # 如果磁盘已有保存偏移，显示其值并将偏移预填到输入框；否则提示将要求首次校准
+        default_calibrate = True if saved is None else False
+        if saved is not None:
+            self.saved_offset_var.set(f"已保存偏移: {saved} 像素")
+            # 直接将已保存偏移填入偏移输入框，便于用户微调
+            if not self.done_offset_var.get().strip():
+                self.done_offset_var.set(str(saved))
+        else:
+            self.saved_offset_var.set("未保存偏移：运行将要求进行按钮位置校准")
+        self.calibrate_var.set(default_calibrate)
+        
+
     def run_conversion(self):
         try:
             pdf_file = self.pdf_path_var.get()
@@ -228,9 +265,35 @@ class AppGUI:
             display_height = int(max_display_height * self.ratio_var.get())
 
             print(f"开始处理: {pdf_file}")
-            print(f"完成按钮偏移: {done_offset if done_offset is not None else '按版本自动'}")
+
+            # 解析页范围
+            def parse_page_range(range_str):
+                if not range_str:
+                    return None
+                pages = set()
+                for part in [p.strip() for p in range_str.split(',') if p.strip()]:
+                    if '-' in part:
+                        start_end = part.split('-')
+                        if start_end[0] == '':
+                            continue
+                        start = int(start_end[0])
+                        if start_end[1] == '':
+                            pages.update(range(start, start + 10000))
+                        else:
+                            end = int(start_end[1])
+                            if end >= start:
+                                pages.update(range(start, end + 1))
+                    else:
+                        pages.add(int(part))
+                return sorted(pages)
+
+            pages_list = None
+            try:
+                pages_list = parse_page_range(self.page_range_var.get().strip())
+            except Exception as e:
+                raise ValueError("页范围格式错误，请使用 1-3,5,7- 类似格式")
             
-            process_pdf_to_ppt(
+            png_names = process_pdf_to_ppt(
                 pdf_path=pdf_file,
                 png_dir=png_dir,
                 ppt_dir=ppt_dir,
@@ -240,11 +303,13 @@ class AppGUI:
                 timeout=self.timeout_var.get(),
                 display_height=display_height,
                 display_width=display_width,
-                pc_manager_version=self.pc_mgr_version_var.get(),
-                done_button_offset=done_offset
+                done_button_offset=done_offset,
+                capture_done_offset=self.calibrate_var.get(),
+                pages=pages_list,
+                update_offset_callback=self.load_offset_from_disk
             )
 
-            combine_ppt(ppt_dir, out_ppt_file)
+            combine_ppt(ppt_dir, out_ppt_file, png_names=png_names)
             out_ppt_file = os.path.abspath(out_ppt_file)
             print(f"\n转换完成！最终文件: {out_ppt_file}")
             # 打开该文件

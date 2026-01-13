@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 from .utils.image_inpainter import inpaint_image
 
-def pdf_to_png(pdf_path, output_dir=None, dpi=150,inpaint=False):
+def pdf_to_png(pdf_path, output_dir=None, dpi=150, inpaint=False, pages=None):
     """
     将 PDF 文件转换为多个 PNG 图片
     
@@ -31,12 +31,23 @@ def pdf_to_png(pdf_path, output_dir=None, dpi=150,inpaint=False):
     
     # 遍历每一页
     page_count = len(pdf_doc)  # 在关闭文档前获取页数
+    # 规范 pages 参数为集合，方便判断
+    pages_set = None
+    if pages is not None:
+        pages_set = set(pages)
+
+    png_names = []
     for page_num, page in enumerate(pdf_doc, 1):
+        # 如果指定了 pages，则跳过不在范围内的页码
+        if pages_set is not None and page_num not in pages_set:
+            continue
         # 渲染页面为图片
         pix = page.get_pixmap(matrix=mat, alpha=False)
         
         # 保存为 PNG
         output_path = output_dir / f"page_{page_num:04d}.png"
+        
+        png_names.append(output_path.name)
 
         if os.path.exists(output_path):
             print(f"跳过已存在的文件: {output_path}")
@@ -46,9 +57,12 @@ def pdf_to_png(pdf_path, output_dir=None, dpi=150,inpaint=False):
         if inpaint:
             inpaint_image(str(output_path), str(output_path))
             print(f"✓ 已修复: {output_path}")
+
+        
             
     pdf_doc.close()
     print(f"\n完成! 共转换 {page_count} 页，输出目录: {output_dir}")
+    return png_names
 
 if __name__ == "__main__":
     # 使用示例

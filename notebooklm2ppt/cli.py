@@ -10,24 +10,35 @@ import sys
 from pathlib import Path
 from .pdf2png import pdf_to_png
 from .utils.image_viewer import show_image_fullscreen
-from .utils.screenshot_automation import take_fullscreen_snip, mouse, screen_height, screen_width
+from .utils.screenshot_automation import take_fullscreen_snip, mouse, screen_height, screen_width, load_saved_done_offset
 from .ppt_combiner import combine_ppt
 
 
-def process_pdf_to_ppt(pdf_path, png_dir, ppt_dir, delay_between_images=2, inpaint=True, dpi=150, timeout=50, display_height=None, display_width=None, pc_manager_version=None, done_button_offset=None):
+def process_pdf_to_ppt(pdf_path, png_dir, ppt_dir, delay_between_images=2, inpaint=True, dpi=150, timeout=50, display_height=None, 
+                    display_width=None, done_button_offset=None, capture_done_offset: bool = True, pages=None, update_offset_callback=None):
     """
     将 PDF 转换为 PNG 图片，然后对每张图片进行截图处理
     
-    参数:
+            try:
         pdf_path: PDF 文件路径
-        png_dir: PNG 输出目录
-        ppt_dir: PPT 输出目录
-        delay_between_images: 处理每张图片之间的延迟（秒），默认 2
-        inpaint: 是否启用图像修复（去水印），默认 True
-        dpi: PNG 输出分辨率，默认 150
-        timeout: PPT 窗口检测超时时间（秒），默认 50
-        display_height: 显示窗口高度（像素），默认 None 使用屏幕高度
-        display_width: 显示窗口宽度（像素），默认 None 使用屏幕宽度
+            # 对第一页允许用户手动点击并捕获完成按钮偏移（如果未保存且启用）
+            capture_offset = (idx == 1 and capture_done_offset)
+            success, ppt_filename, computed_offset = take_fullscreen_snip(
+                check_ppt_window=True,
+                ppt_check_timeout=timeout,
+                width=display_width,
+                height=display_height,
+                pc_manager_version=pc_manager_version,
+                done_button_right_offset=done_button_offset,
+                capture_done_offset_if_missing=capture_offset,
+                force_capture=force_calibrate,
+            )
+            # 如果本次截屏捕获并保存了偏移，回调通知（GUI 可使用此回调更新显示）
+            try:
+                if computed_offset is not None and offset_saved_callback:
+                    offset_saved_callback(int(computed_offset))
+            except Exception:
+                pass
         pc_manager_version: 电脑管家版本号；3.19及以上自动使用 190，低于3.19 使用 210
         done_button_offset: 完成按钮右侧偏移量，传入数字时优先使用，不传则按版本推断
     """
@@ -40,7 +51,7 @@ def process_pdf_to_ppt(pdf_path, png_dir, ppt_dir, delay_between_images=2, inpai
         print(f"错误: PDF 文件 {pdf_path} 不存在")
         return
     
-    pdf_to_png(pdf_path, png_dir, dpi=dpi, inpaint=inpaint)
+    png_names = pdf_to_png(pdf_path, png_dir, dpi=dpi, inpaint=inpaint, pages=pages)
     
     # 创建ppt输出目录
     ppt_dir.mkdir(exist_ok=True, parents=True)
@@ -51,7 +62,7 @@ def process_pdf_to_ppt(pdf_path, png_dir, ppt_dir, delay_between_images=2, inpai
     print(f"下载文件夹: {downloads_folder}")
     
     # 2. 获取所有 PNG 图片文件并排序
-    png_files = sorted(png_dir.glob("page_*.png"))
+    png_files = [png_dir / name for name in png_names]
     
     if not png_files:
         print(f"错误: 在 {png_dir} 中没有找到 PNG 图片")
@@ -101,14 +112,26 @@ def process_pdf_to_ppt(pdf_path, png_dir, ppt_dir, delay_between_images=2, inpai
         
         try:
             # 执行全屏截图并检测PPT窗口
-            success, ppt_filename = take_fullscreen_snip(
+            # 对第一页允许用户手动点击并捕获完成按钮偏移（如果未保存或被强制要求）
+            capture_offset = (idx == 1 and capture_done_offset)
+            if capture_offset:
+                done_button_offset = None  # 强制重新捕获偏移
+            else:
+                assert done_button_offset is not None, "必须提供完成按钮偏移量"
+            success, ppt_filename, computed_offset = take_fullscreen_snip(
                 check_ppt_window=True,
                 ppt_check_timeout=timeout,
                 width=display_width,
                 height=display_height,
-                pc_manager_version=pc_manager_version,
                 done_button_right_offset=done_button_offset,
             )
+            if success and computed_offset is not None:
+                print(f"捕获到的完成按钮偏移: {computed_offset}")
+                done_button_offset = computed_offset  # 更新为最新捕获的偏移
+                if update_offset_callback:
+                    update_offset_callback()
+
+
             if success and ppt_filename:
                 print(f"✓ 图片 {png_file.name} 处理完成，PPT窗口已创建: {ppt_filename}")
                 
@@ -166,6 +189,7 @@ def process_pdf_to_ppt(pdf_path, png_dir, ppt_dir, delay_between_images=2, inpai
     print("\n" + "=" * 60)
     print(f"完成! 共处理 {len(png_files)} 张图片")
     print("=" * 60)
+    return png_names
 
 
 def main():
@@ -232,6 +256,14 @@ def main():
     )
     
     parser.set_defaults(inpaint=True)
+
+    # 根据磁盘上是否存在已保存偏移决定默认是否进行首次校准
+    try:
+        _saved_offset = load_saved_done_offset()
+        _default_capture = True if _saved_offset is None else False
+    except Exception:
+        _default_capture = True
+    parser.set_defaults(capture_done_offset=_default_capture)
     
     parser.add_argument(
         '-s', '--size-ratio',
@@ -261,6 +293,21 @@ def main():
         type=int,
         default=None,
         help='转换按钮右侧偏移量（像素）。设置后优先生效，留空则按电脑管家版本推断'
+    )
+
+    parser.add_argument(
+        '--pages', '-p',
+        dest='pages',
+        type=str,
+        default=None,
+        help='页范围，格式示例: 1-3,5,7- （与 Word 打印页范围一致）'
+    )
+
+    parser.add_argument(
+        '--no-calibrate',
+        dest='capture_done_offset',
+        action='store_false',
+        help='禁用首次页面的手动点击校准（默认启用）'
     )
     
     args = parser.parse_args()
@@ -298,6 +345,34 @@ def main():
     print("=" * 60)
     print()
 
+    # 解析页范围参数（如果有）
+    def _parse_page_range(range_str):
+        if not range_str:
+            return None
+        pages = set()
+        parts = [p.strip() for p in range_str.split(',') if p.strip()]
+        for part in parts:
+            if '-' in part:
+                start_end = part.split('-')
+                if start_end[0] == '':
+                    continue
+                start = int(start_end[0])
+                if start_end[1] == '':
+                    # 开放式范围，例如 7-
+                    # 表示从 start 到最后，表示为 None, 主逻辑会处理为 None（不限制）
+                    # 这里将把开放式范围当作起始页及后续页：使用 a large sentinel
+                    pages.update(range(start, start + 10000))
+                else:
+                    end = int(start_end[1])
+                    if end < start:
+                        continue
+                    pages.update(range(start, end + 1))
+            else:
+                pages.add(int(part))
+        return sorted(pages)
+
+    pages_list = _parse_page_range(args.pages)
+
     process_pdf_to_ppt(
         pdf_path=pdf_file,
         png_dir=png_dir,
@@ -310,6 +385,8 @@ def main():
         display_width=display_width,
         pc_manager_version=args.pc_manager_version,
         done_button_offset=args.done_button_offset,
+        capture_done_offset=args.capture_done_offset,
+        pages=pages_list,
     )
 
     combine_ppt(ppt_dir, out_ppt_file)
