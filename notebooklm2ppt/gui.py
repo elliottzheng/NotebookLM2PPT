@@ -14,6 +14,7 @@ import ctypes
 import webbrowser
 
 MINERU_URL = "https://mineru.net/"
+GITHUB_URL = "https://github.com/elliottzheng/NotebookLM2PPT"
 
 
 CONFIG_FILE = Path("./config.json")
@@ -95,6 +96,8 @@ class AppGUI:
         self.root.title("NotebookLM2PPT - PDF 转 PPT 工具")
         self.root.geometry("850x750")
         self.root.minsize(750, 550)
+        
+        self.show_startup_dialog()
         
         self.setup_ui()
         
@@ -361,6 +364,86 @@ class AppGUI:
         else:
             self.saved_offset_var.set("未保存: 将自动校准")
         self.calibrate_var.set(not is_valid)
+        
+    def show_startup_dialog(self):
+        config_file = Path("./config.json")
+        show_dialog = True
+        
+        try:
+            if config_file.exists():
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    config_data = json.load(f)
+                    show_dialog = not config_data.get("hide_startup_dialog", False)
+        except Exception:
+            pass
+        
+        if not show_dialog:
+            return
+        
+        top = tk.Toplevel(self.root)
+        top.title("欢迎使用")
+        top.geometry("500x300")
+        top.resizable(False, False)
+        
+        top.update_idletasks()
+        width = top.winfo_width()
+        height = top.winfo_height()
+        x = (top.winfo_screenwidth() // 2) - (width // 2)
+        y = (top.winfo_screenheight() // 2) - (height // 2)
+        top.geometry(f'{width}x{height}+{x}+{y}')
+        
+        info_frame = ttk.Frame(top, padding="20")
+        info_frame.pack(fill=tk.BOTH, expand=True)
+        
+        info_text = (
+            "本软件是免费开源的 PDF 转 PPT 工具\n\n"
+            "开发者：Elliott Zheng\n\n"
+            "如果您感觉本软件对您有所帮助，请在项目GitHub上给个star或是介绍给您的朋友，谢谢。\n\n"
+            "本软件免费开源，如果您是以付费的方式获得本软件，那么你应该是被骗了。[○･｀Д´･○]\n\n"
+            "感谢使用本工具！"
+        )
+        
+        txt = scrolledtext.ScrolledText(info_frame, wrap=tk.WORD, height=8)
+        txt.pack(fill=tk.BOTH, expand=True)
+        txt.insert(tk.END, info_text)
+        txt.configure(state='disabled')
+        
+        btn_frame = ttk.Frame(info_frame)
+        btn_frame.pack(fill=tk.X, pady=(15, 0))
+        
+        def open_github():
+            try:
+                webbrowser.open_new_tab(GITHUB_URL)
+            except Exception as e:
+                messagebox.showerror("错误", f"无法打开网页: {e}")
+        
+        def on_ok():
+            top.destroy()
+        
+        def on_dont_show():
+            try:
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    config_data = json.load(f)
+            except Exception:
+                config_data = {}
+            
+            config_data["hide_startup_dialog"] = True
+            
+            try:
+                with open(config_file, 'w', encoding='utf-8') as f:
+                    json.dump(config_data, f, ensure_ascii=False, indent=4)
+            except Exception as e:
+                print(f"⚠️ 保存配置失败: {e}")
+            
+            top.destroy()
+        
+        ttk.Button(btn_frame, text="打开 GitHub 主页", command=open_github).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="不再显示", command=on_dont_show).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(btn_frame, text="确定", command=on_ok).pack(side=tk.RIGHT, padx=5)
+        
+        top.transient(self.root)
+        top.grab_set()
+        self.root.wait_window(top)
         
     def show_mineru_info(self):
         info = (
