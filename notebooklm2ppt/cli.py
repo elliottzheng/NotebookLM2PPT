@@ -14,7 +14,7 @@ from .utils.screenshot_automation import take_fullscreen_snip, mouse, screen_hei
 
 
 def process_pdf_to_ppt(pdf_path, png_dir, ppt_dir, delay_between_images=2, inpaint=True, dpi=150, timeout=50, display_height=None, 
-                    display_width=None, done_button_offset=None, capture_done_offset: bool = True, pages=None, update_offset_callback=None, stop_flag=None):
+                    display_width=None, done_button_offset=None, capture_done_offset: bool = True, pages=None, update_offset_callback=None, stop_flag=None, force_regenerate=False):
     """
     将 PDF 转换为 PNG 图片，然后对每张图片进行截图处理
     
@@ -33,6 +33,7 @@ def process_pdf_to_ppt(pdf_path, png_dir, ppt_dir, delay_between_images=2, inpai
         pages: 要处理的页码范围
         update_offset_callback: 偏移更新回调函数
         stop_flag: 停止标志（用于中断转换）
+        force_regenerate: 是否强制重新生成所有 PPT（默认 False，复用已存在的 PPT）
     """
     # 1. 将 PDF 转换为 PNG 图片
     print("=" * 60)
@@ -81,6 +82,13 @@ def process_pdf_to_ppt(pdf_path, png_dir, ppt_dir, delay_between_images=2, inpai
         
         print(f"\n[{idx}/{len(png_files)}] 处理图片: {png_file.name}")
         
+        target_filename = png_file.stem + ".pptx"
+        target_path = ppt_dir / target_filename
+        
+        if not force_regenerate and target_path.exists():
+            print(f"  ✓ PPT文件已存在，跳过转换: {target_path}")
+            continue
+        
         stop_event = threading.Event()
         
         def _viewer():
@@ -120,7 +128,11 @@ def process_pdf_to_ppt(pdf_path, png_dir, ppt_dir, delay_between_images=2, inpai
                 width=display_width,
                 height=display_height,
                 done_button_right_offset=done_button_offset,
+                stop_flag=stop_flag,
             )
+            if stop_flag and stop_flag():
+                print("\n⏹️ 用户请求停止转换")
+                break
             if success and computed_offset is not None:
                 print(f"捕获到的完成按钮偏移: {computed_offset}")
                 done_button_offset = computed_offset  # 更新为最新捕获的偏移
@@ -153,9 +165,6 @@ def process_pdf_to_ppt(pdf_path, png_dir, ppt_dir, delay_between_images=2, inpai
                         print(f"  找到最近的PPT文件: {ppt_source_path.name}")
                 
                 if ppt_source_path.exists():
-                    target_filename = png_file.stem + ".pptx"
-                    target_path = ppt_dir / target_filename
-                    
                     shutil.copy2(ppt_source_path, target_path)
                     print(f"  ✓ PPT文件已复制: {target_path}")
                     

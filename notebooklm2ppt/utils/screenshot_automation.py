@@ -26,12 +26,20 @@ screen_width = win32api.GetSystemMetrics(0)
 screen_height = win32api.GetSystemMetrics(1)
 
 
-def _wait_for_left_click(timeout: float = 60.0):
-    """等待用户进行一次左键点击，返回点击时的屏幕坐标 (x, y)。超时返回 None。"""
-    print(f"请手动点击“完成”按钮以保存第一页（等待 {int(timeout)} 秒）...")
+def _wait_for_left_click(timeout: float = 60.0, stop_flag=None):
+    """等待用户进行一次左键点击，返回点击时的屏幕坐标 (x, y)。超时返回 None。
+    
+    Args:
+        timeout: 超时时间（秒）
+        stop_flag: 停止标志函数，返回 True 时中断等待
+    """
+    print(f'请手动点击"完成"按钮以保存第一页（等待 {int(timeout)} 秒）...')
     start = time.time()
     prev_state = bool(win32api.GetAsyncKeyState(0x01) & 0x8000)
     while time.time() - start < timeout:
+        if stop_flag and stop_flag():
+            print("检测到停止请求，中断等待")
+            return None
         state = bool(win32api.GetAsyncKeyState(0x01) & 0x8000)
         # 检测按下的瞬间
         if state and not prev_state:
@@ -234,8 +242,8 @@ def create_topmost_dialog():
     root.attributes("-topmost", True)   
     msg = (
             "正在进行按钮位置校准，需要您的一次交互确认，请仔细阅读此说明\n\n"
-            "点击“确定”后不要动鼠标，等到出现智能圈选工具栏后，请您移动鼠标手动点击“智能复制到PPT”按钮即可完整校准。\n\n"
-            "请在准备好后点击“确定”继续。转换过程中请不要最小化窗口或干扰鼠标操作。"
+            '点击"确定"后不要动鼠标，等到出现智能圈选工具栏后，请您移动鼠标手动点击"智能复制到PPT"按钮即可完整校准。\n\n'
+            '请在准备好后点击"确定"继续。转换过程中请不要最小化窗口或干扰鼠标操作。'
     )
     a = messagebox.askokcancel('提示', msg, parent=root)
     root.destroy() 
@@ -251,6 +259,7 @@ def take_fullscreen_snip(
     width: int = screen_width,
     height: int = screen_height,
     done_button_right_offset: int | None = None,
+    stop_flag=None,
 ):
     """使用微软电脑管家的智能圈选功能进行全屏截图。
 
@@ -263,6 +272,7 @@ def take_fullscreen_snip(
         width: 截图宽度，默认为屏幕宽度
         height: 截图高度，默认为屏幕高度
         done_button_right_offset: 完成按钮的右侧偏移量（像素），用于手动覆盖
+        stop_flag: 停止标志函数，返回 True 时中断等待
         pc_manager_version: 电脑管家版本号；3.19及以上自动使用 190，低于3.19 使用 210
     
     Returns:
@@ -329,7 +339,7 @@ def take_fullscreen_snip(
 
         
         
-        coords = _wait_for_left_click(timeout=60)
+        coords = _wait_for_left_click(timeout=60, stop_flag=stop_flag)
         if coords:
             click_x, click_y = coords
             computed_offset = int((bottom_right[0]) - click_x)

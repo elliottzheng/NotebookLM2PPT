@@ -68,7 +68,7 @@ def enable_windows_dpi_awareness(root=None):
                     gdi32 = ctypes.windll.gdi32
                     dpi = gdi32.GetDeviceCaps(hdc, 88)
                 scaling = float(dpi) / BASE_WINDOWS_DPI
-                print("??", scaling)
+                print(f"系统 DPI: {dpi}, 缩放因子: {scaling}")
                 root.tk.call('tk', 'scaling', scaling)
             except Exception:
                 pass
@@ -217,33 +217,35 @@ class AppGUI:
         self.inpaint_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(opt_frame, text="去除水印（图像修复）", variable=self.inpaint_var).grid(row=4, column=0, columnspan=3, sticky=tk.W, pady=5)
 
-        ttk.Separator(opt_frame, orient='horizontal').grid(row=5, column=0, columnspan=4, sticky="ew", pady=10)
+        self.force_regenerate_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(opt_frame, text="强制重新生成所有PPT页面（不勾选则复用已存在的 PPT）", variable=self.force_regenerate_var).grid(row=5, column=0, columnspan=3, sticky=tk.W, pady=5)
 
-        ttk.Label(opt_frame, text="页码范围:").grid(row=6, column=0, sticky=tk.W, pady=5)
+        ttk.Separator(opt_frame, orient='horizontal').grid(row=6, column=0, columnspan=4, sticky="ew", pady=10)
+
+        ttk.Label(opt_frame, text="页码范围:").grid(row=7, column=0, sticky=tk.W, pady=5)
         self.page_range_var = tk.StringVar(value="")
         page_range_entry = ttk.Entry(opt_frame, textvariable=self.page_range_var, width=30)
-        page_range_entry.grid(row=6, column=1, columnspan=2, sticky="ew", padx=5, pady=5)
+        page_range_entry.grid(row=7, column=1, columnspan=2, sticky="ew", padx=5, pady=5)
         self.add_context_menu(page_range_entry)
-        ttk.Label(opt_frame, text="留空=全部，示例: 1-3,5,7-9", foreground="gray").grid(row=6, column=3, sticky=tk.W, padx=5, pady=5)
+        ttk.Label(opt_frame, text="留空=全部，示例: 1-3,5,7-9", foreground="gray").grid(row=7, column=3, sticky=tk.W, padx=5, pady=5)
 
-        ttk.Separator(opt_frame, orient='horizontal').grid(row=7, column=0, columnspan=4, sticky="ew", pady=10)
+        ttk.Separator(opt_frame, orient='horizontal').grid(row=8, column=0, columnspan=4, sticky="ew", pady=10)
 
-        ttk.Label(opt_frame, text="按钮偏移 (像素):").grid(row=8, column=0, sticky=tk.W, pady=5)
+        ttk.Label(opt_frame, text="按钮偏移 (像素):").grid(row=9, column=0, sticky=tk.W, pady=5)
         self.done_offset_var = tk.StringVar(value="")
         done_offset_entry = ttk.Entry(opt_frame, textvariable=self.done_offset_var, width=10)
-        done_offset_entry.grid(row=8, column=1, sticky=tk.W, padx=5, pady=5)
+        done_offset_entry.grid(row=9, column=1, sticky=tk.W, padx=5, pady=5)
         self.add_context_menu(done_offset_entry)
         self.saved_offset_var = tk.StringVar(value="")
-        ttk.Label(opt_frame, textvariable=self.saved_offset_var, foreground="blue").grid(row=8, column=2, sticky=tk.W, padx=5)
+        ttk.Label(opt_frame, textvariable=self.saved_offset_var, foreground="blue").grid(row=9, column=2, sticky=tk.W, padx=5)
         
-        ttk.Label(opt_frame, text="⚠️ 核心参数：程序通过模拟鼠标点击'转换为PPT'按钮实现转换", foreground="red").grid(row=9, column=0, columnspan=4, sticky=tk.W)
-        ttk.Label(opt_frame, text="   如果无法准确定位按钮位置，核心功能将无法实现！可通过勾选“校准按钮位置”进行校准", foreground="red").grid(row=10, column=0, columnspan=4, sticky=tk.W)
+        ttk.Label(opt_frame, text="⚠️ 核心参数：程序通过模拟鼠标点击'转换为PPT'按钮实现转换", foreground="red").grid(row=10, column=0, columnspan=4, sticky=tk.W)
+        ttk.Label(opt_frame, text='   如果无法准确定位按钮位置，核心功能将无法实现！可通过勾选"校准按钮位置"进行校准"', foreground="red").grid(row=11, column=0, columnspan=4, sticky=tk.W)
         
         self.calibrate_var = tk.BooleanVar(value=True)
         cb = ttk.Checkbutton(opt_frame, text="校准按钮位置", variable=self.calibrate_var)
-        cb.grid(row=11, column=0, columnspan=3, sticky=tk.W, pady=5)
-        # ttk 不支持 foreground，用样式或 Label 实现红色提示
-        ttk.Label(opt_frame, text="提示: 程序会自动保存校准结果，下次无需重复校准", foreground="red").grid(row=12, column=0, columnspan=4, sticky=tk.W)
+        cb.grid(row=12, column=0, columnspan=3, sticky=tk.W, pady=5)
+        ttk.Label(opt_frame, text="提示: 程序会自动保存校准结果，下次无需重复校准", foreground="red").grid(row=13, column=0, columnspan=4, sticky=tk.W)
 
 
         # Control
@@ -334,6 +336,7 @@ class AppGUI:
             "timeout": self.timeout_var.get(),
             "ratio": self.ratio_var.get(),
             "inpaint": self.inpaint_var.get(),
+            "force_regenerate": self.force_regenerate_var.get(),
             "done_offset": self.done_offset_var.get(),
         }
         try:
@@ -353,6 +356,7 @@ class AppGUI:
                 self.timeout_var.set(config_data.get("timeout", 50))
                 self.ratio_var.set(config_data.get("ratio", 0.8))
                 self.inpaint_var.set(config_data.get("inpaint", True))
+                self.force_regenerate_var.set(config_data.get("force_regenerate", False))
                 offset_value = config_data.get("done_offset", "")
                 self.update_offset_related_gui(offset_value)
         except Exception as e:
@@ -556,7 +560,8 @@ class AppGUI:
                 capture_done_offset=self.calibrate_var.get(),
                 pages=pages_list,
                 update_offset_callback=self.update_offset_disk,
-                stop_flag=lambda: self.stop_flag
+                stop_flag=lambda: self.stop_flag,
+                force_regenerate=self.force_regenerate_var.get()
             )
 
             if self.stop_flag:
