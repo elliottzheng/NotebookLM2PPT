@@ -13,7 +13,6 @@
 import re
 import time
 import threading
-import cv2
 import win32api
 import win32gui
 import win32con
@@ -378,25 +377,23 @@ if __name__ == "__main__":
     image_path = "Hackathon_Architect_Playbook_pngs/page_0001.png"
 
     stop_event = threading.Event()
+    ready_event = threading.Event()
 
     def _viewer():
-        # 打开全屏窗口
-        show_image_fullscreen(image_path)
-        # 维持 OpenCV 事件循环，否则窗口可能不刷新
-        while not stop_event.is_set():
-            # 处理 GUI 事件；保持窗口响应
-            cv2.waitKey(50)
-        # 停止时关闭窗口
-        try:
-            cv2.destroyAllWindows()
-        except Exception:
-            pass
+        # 打开全屏窗口（传入stop_event和ready_event）
+        show_image_fullscreen(image_path, stop_event=stop_event, ready_event=ready_event)
 
-    t = threading.Thread(target=_viewer, name="opencv_viewer", daemon=True)
+    t = threading.Thread(target=_viewer, name="tkinter_viewer", daemon=True)
     t.start()
 
-    # 等待窗口稳定后开始截图
-    time.sleep(2)
+    # 等待窗口准备好
+    print("等待图片窗口显示...")
+    if ready_event.wait(timeout=10):
+        print("✓ 图片窗口已显示")
+        time.sleep(0.5)
+    else:
+        print("⚠ 窗口显示超时")
+
     try:
         take_fullscreen_snip()
     finally:

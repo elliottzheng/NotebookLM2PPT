@@ -1,13 +1,7 @@
-import cv2
 # from pyinpaint import Inpaint
 import numpy as np
-from skimage import data
-from skimage.morphology import disk, binary_dilation
 from skimage.restoration import inpaint
 from PIL import Image
-org_img = "Hackathon_Architect_Playbook_pngs/page_0001.png"
-# mask = "page_0001_mask.jpg"
-
 
 
 def inpaint_image(image_path, output_path):
@@ -34,6 +28,4 @@ def inpaint_image(image_path, output_path):
     mask[r1:r2, c1:c2] = True
 
     image_result = inpaint.inpaint_biharmonic(image_defect, mask, channel_axis=-1)
-    # print(image_result)
-    # cv2.imwrite(output_path, 
     Image.fromarray((image_result*255).astype("uint8")).save(output_path)

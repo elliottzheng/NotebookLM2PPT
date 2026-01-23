@@ -1,7 +1,6 @@
 import json
 import numpy as np
-import cv2
-from PIL import Image
+from PIL import Image, ImageDraw
 import os
 import requests
 from sklearn.cluster import DBSCAN
@@ -105,15 +104,6 @@ def compute_edge_diversity(image_cv, left, top, right, bottom):
 
     main_color = flatten_points[clustering.labels_==np.argmax(counts)].mean(axis=0)
     return 1 - main_ratio, main_color
-
-def compute_color_diff(color1, color2):
-    # CIELAB - 避免 uint8 在相减时发生环绕（underflow/overflow），先转换为 float
-    # color1 is [R,G,B]
-    # color2 is [R,G,B]
-    color1_lab = cv2.cvtColor(np.uint8([[color1]]), cv2.COLOR_RGB2Lab)[0][0].astype(np.float32)
-    color2_lab = cv2.cvtColor(np.uint8([[color2]]), cv2.COLOR_RGB2Lab)[0][0].astype(np.float32)
-    diff = np.linalg.norm(color1_lab - color2_lab)
-    return float(diff)
 
 
 
@@ -232,7 +222,10 @@ def refine_ppt(tmp_image_dir, json_file, ppt_file, png_dir, png_files, final_out
         image_h, image_w, _ = image_cv.shape
 
         if old_bg_cv is not None:
-            old_bg_cv = cv2.resize(old_bg_cv, (image_w, image_h), interpolation=cv2.INTER_CUBIC)
+            # 使用PIL进行resize
+            old_bg_pil = Image.fromarray(old_bg_cv)
+            old_bg_pil = old_bg_pil.resize((image_w, image_h), Image.BICUBIC)
+            old_bg_cv = np.array(old_bg_pil)
 
         image_scale = image_w / pdf_w
 
@@ -246,7 +239,7 @@ def refine_ppt(tmp_image_dir, json_file, ppt_file, png_dir, png_files, final_out
             fill_color = fill_color.astype(np.uint8).tolist()
             print("div=", diversity, " text_block=", text_block)
             if old_bg_cv is None or diversity < 0.5: # 边缘多样性低，认为是纯色区域，则可以直接填充
-                cv2.rectangle(image_cv, (l, t), (r, b), fill_color, thickness=-1)
+                image_cv[t:b, l:r] = fill_color
             else: # 边缘多样性高，保留原背景
                 image_cv[t:b, l:r] = old_bg_cv[t:b, l:r] # 保留原背景的前提是要有原背景图
 

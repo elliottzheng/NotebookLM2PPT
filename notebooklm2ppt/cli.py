@@ -3,7 +3,6 @@
 import os
 import time
 import threading
-import cv2
 import shutil
 import argparse
 import sys
@@ -90,29 +89,31 @@ def process_pdf_to_ppt(pdf_path, png_dir, ppt_dir, delay_between_images=2, inpai
             continue
         
         stop_event = threading.Event()
-        
+        ready_event = threading.Event()
+
         def _viewer():
             """在线程中显示图片"""
-            show_image_fullscreen(str(png_file), display_height=display_height)
-            # 维持 OpenCV 事件循环
-            while not stop_event.is_set():
-                cv2.waitKey(50)
-            # 关闭窗口
-            try:
-                cv2.destroyAllWindows()
-            except Exception:
-                pass
-        
+            # 传入stop_event和ready_event
+            show_image_fullscreen(str(png_file), display_height=display_height,
+                                 stop_event=stop_event, ready_event=ready_event)
+
         # 启动图片显示线程
         viewer_thread = threading.Thread(
-            target=_viewer, 
-            name=f"opencv_viewer_{idx}", 
+            target=_viewer,
+            name=f"tkinter_viewer_{idx}",
             daemon=True
         )
         viewer_thread.start()
-        
-        # 等待窗口稳定
-        time.sleep(3)
+
+        # 等待窗口准备好（最多等待10秒）
+        print("等待图片窗口显示...")
+        window_ready = ready_event.wait(timeout=10)
+        if not window_ready:
+            print("⚠ 窗口显示超时，继续执行...")
+        else:
+            print("✓ 图片窗口已显示")
+            # 额外等待一小段时间确保窗口稳定
+            time.sleep(0.5)
         
         try:
             # 执行全屏截图并检测PPT窗口
