@@ -24,7 +24,7 @@ def _get_screen_resolution():
         return 1920, 1080
 
 
-def show_image_fullscreen(image_path: str, display_height: int = None, stop_event=None, ready_event=None):
+def show_image_fullscreen(image_path: str, display_height: int = None, stop_event=None, ready_event=None, stop_callback=None):
     """
     显示图片在屏幕左上角
 
@@ -33,6 +33,7 @@ def show_image_fullscreen(image_path: str, display_height: int = None, stop_even
         display_height: 指定显示高度（像素），如果为None则自动适配屏幕
         stop_event: threading.Event对象，当设置时关闭窗口
         ready_event: threading.Event对象，当窗口准备好后设置此事件
+        stop_callback: 可调用对象，按ESC键时会调用此回调函数来停止整个转换流程
     """
     if not os.path.exists(image_path):
         raise FileNotFoundError(f"未找到图片: {image_path}")
@@ -96,6 +97,29 @@ def show_image_fullscreen(image_path: str, display_height: int = None, stop_even
 
     # 保持对图片的引用，防止被垃圾回收
     canvas.image = tk_image
+
+    # 添加ESC键响应：按ESC停止转换并关闭窗口
+    def on_escape(event):
+        print("\n⚠ 检测到ESC键，正在停止转换...")
+        # 触发停止回调（停止整个转换流程）
+        if stop_callback is not None:
+            try:
+                stop_callback()
+            except Exception as e:
+                print(f"调用停止回调失败: {e}")
+        # 触发停止事件
+        if stop_event is not None:
+            stop_event.set()
+        # 关闭窗口
+        try:
+            if not is_toplevel:
+                root.quit()
+            root.destroy()
+        except:
+            pass
+
+    # 绑定ESC键
+    root.bind('<Escape>', on_escape)
 
     # 置顶窗口（Windows）
     try:

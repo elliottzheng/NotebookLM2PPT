@@ -90,7 +90,7 @@ def get_explorer_windows():
     return explorer_windows
 
 
-def check_new_ppt_window(initial_windows, timeout=30, check_interval=1):
+def check_new_ppt_window(initial_windows, timeout=30, check_interval=1, stop_flag=None):
     """
     检查是否出现新的PPT窗口
     
@@ -98,6 +98,7 @@ def check_new_ppt_window(initial_windows, timeout=30, check_interval=1):
         initial_windows: 初始的PPT窗口句柄列表
         timeout: 超时时间（秒），默认30秒
         check_interval: 检查间隔（秒），默认1秒
+        stop_flag: 停止标志函数，返回 True 时中断等待
     
     返回:
         (bool, list, str): (是否找到新窗口, 新窗口句柄列表, PPT文件名)
@@ -109,6 +110,10 @@ def check_new_ppt_window(initial_windows, timeout=30, check_interval=1):
     seen_windows = set(initial_windows)  # 追踪所有见过的窗口
     
     while time.time() - start_time < timeout:
+        if stop_flag and stop_flag():
+            print("检测到停止请求，中断PPT窗口检测")
+            return False, [], None
+        
         current_windows = get_ppt_windows()
         new_windows = [w for w in current_windows if w not in seen_windows]
         
@@ -180,7 +185,7 @@ def check_new_ppt_window(initial_windows, timeout=30, check_interval=1):
     return False, [], None
 
 
-def check_and_close_download_folder(initial_explorer_windows, timeout=10, check_interval=0.5):
+def check_and_close_download_folder(initial_explorer_windows, timeout=10, check_interval=0.5, stop_flag=None):
     """
     检查是否出现新的文件资源管理器窗口（特别是下载文件夹），如果有则关闭
     
@@ -188,6 +193,7 @@ def check_and_close_download_folder(initial_explorer_windows, timeout=10, check_
         initial_explorer_windows: 初始的文件资源管理器窗口列表 [(hwnd, title), ...]
         timeout: 超时时间（秒），默认10秒
         check_interval: 检查间隔（秒），默认0.5秒
+        stop_flag: 停止标志函数，返回 True 时中断等待
     
     返回:
         int: 关闭的窗口数量
@@ -198,6 +204,10 @@ def check_and_close_download_folder(initial_explorer_windows, timeout=10, check_
     initial_hwnds = [hwnd for hwnd, _ in initial_explorer_windows]
     
     while time.time() - start_time < timeout:
+        if stop_flag and stop_flag():
+            print("检测到停止请求，中断文件资源管理器窗口检测")
+            return closed_count
+        
         current_windows = get_explorer_windows()
         new_windows = [(hwnd, title) for hwnd, title in current_windows if hwnd not in initial_hwnds]
         
@@ -291,8 +301,15 @@ def take_fullscreen_snip(
         print(f"点击前PPT窗口数量: {len(initial_ppt_windows)}")
     print(f"点击前文件资源管理器窗口数量: {len(initial_explorer_windows)}")
 
-    # 等待用户聚焦到正确的窗口
+    if stop_flag and stop_flag():
+        print("检测到停止请求，中断截图操作")
+        return False, None, None
+
     time.sleep(delay_before_hotkey)
+
+    if stop_flag and stop_flag():
+        print("检测到停止请求，中断截图操作")
+        return False, None, None
 
 
     # 简化逻辑：优先使用函数参数；如果未提供或强制重新捕获，则要求手动点击以捕获偏移并保存
@@ -305,10 +322,16 @@ def take_fullscreen_snip(
         print("未传入完成按钮偏移，稍后将要求手动点击以捕获并保存偏移。")
         create_topmost_dialog()
 
-    # 打开微软电脑管家的智能圈选工具
-    # pywinauto 使用 '^+a' 表示 Ctrl+Shift+A
+    if stop_flag and stop_flag():
+        print("检测到停止请求，中断截图操作")
+        return False, None, None
+
     keyboard.send_keys('^+a')
     time.sleep(2)
+
+    if stop_flag and stop_flag():
+        print("检测到停止请求，中断截图操作")
+        return False, None, None
 
     # Define key points for the snip and confirmation click.
     # top_left = (5, 5)
@@ -336,7 +359,11 @@ def take_fullscreen_snip(
 
     # Release left button
     mouse.release(button='left', coords=bottom_right)
-    # 如果没有传入偏移或强制重新捕获，则要求手动点击完成按钮以捕获偏移并保存
+
+    if stop_flag and stop_flag():
+        print("检测到停止请求，中断截图操作")
+        return False, None, None
+
     if resolved_offset is None:
         
 
@@ -362,10 +389,9 @@ def take_fullscreen_snip(
     
     # 检查是否出现新的PPT窗口
     if check_ppt_window:
-        success, new_windows, ppt_filename = check_new_ppt_window(initial_ppt_windows, timeout=ppt_check_timeout)
+        success, new_windows, ppt_filename = check_new_ppt_window(initial_ppt_windows, timeout=ppt_check_timeout, stop_flag=stop_flag)
         
-        # 同时检查并关闭新打开的文件资源管理器窗口（下载文件夹）
-        check_and_close_download_folder(initial_explorer_windows, timeout=10)
+        check_and_close_download_folder(initial_explorer_windows, timeout=10, stop_flag=stop_flag)
         
         return success, ppt_filename, computed_offset
     

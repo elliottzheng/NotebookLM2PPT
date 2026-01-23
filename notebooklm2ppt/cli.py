@@ -72,11 +72,22 @@ def process_pdf_to_ppt(pdf_path, png_dir, ppt_dir, delay_between_images=2, inpai
     
     print(f"显示窗口尺寸: {display_width} x {display_height}")
 
-    
+    # 创建一个本地停止标志，用于响应ESC键
+    esc_stop_requested = [False]  # 使用列表以便在嵌套函数中修改
+
+    # 创建组合停止标志函数，同时检查外层stop_flag和ESC键停止请求
+    def combined_stop_flag():
+        return (stop_flag and stop_flag()) or esc_stop_requested[0]
+
     # 3. 对每张图片进行截图处理
     for idx, png_file in enumerate(png_files, 1):
-        if stop_flag and stop_flag():
+        if combined_stop_flag():
             print("\n⏹️ 用户请求停止转换")
+            break
+
+        # 检查是否按了ESC键
+        if esc_stop_requested[0]:
+            print("\n⏹️ 用户按ESC键停止转换")
             break
         
         print(f"\n[{idx}/{len(png_files)}] 处理图片: {png_file.name}")
@@ -91,11 +102,18 @@ def process_pdf_to_ppt(pdf_path, png_dir, ppt_dir, delay_between_images=2, inpai
         stop_event = threading.Event()
         ready_event = threading.Event()
 
+        # 创建一个回调函数，用于在按ESC键时停止整个转换流程
+        def on_stop_requested():
+            """当用户按ESC键时，设置停止标志"""
+            print("用户请求停止转换（按ESC键）")
+            esc_stop_requested[0] = True
+
         def _viewer():
             """在线程中显示图片"""
-            # 传入stop_event和ready_event
+            # 传入stop_event、ready_event和stop_callback
             show_image_fullscreen(str(png_file), display_height=display_height,
-                                 stop_event=stop_event, ready_event=ready_event)
+                                 stop_event=stop_event, ready_event=ready_event,
+                                 stop_callback=on_stop_requested)
 
         # 启动图片显示线程
         viewer_thread = threading.Thread(
@@ -129,10 +147,13 @@ def process_pdf_to_ppt(pdf_path, png_dir, ppt_dir, delay_between_images=2, inpai
                 width=display_width,
                 height=display_height,
                 done_button_right_offset=done_button_offset,
-                stop_flag=stop_flag,
+                stop_flag=combined_stop_flag,
             )
-            if stop_flag and stop_flag():
+            if combined_stop_flag():
                 print("\n⏹️ 用户请求停止转换")
+                break
+            if esc_stop_requested[0]:
+                print("\n⏹️ 用户按ESC键停止转换")
                 break
             if success and computed_offset is not None:
                 print(f"捕获到的完成按钮偏移: {computed_offset}")
