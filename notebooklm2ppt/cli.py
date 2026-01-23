@@ -10,10 +10,11 @@ from pathlib import Path
 from .pdf2png import pdf_to_png
 from .utils.image_viewer import show_image_fullscreen
 from .utils.screenshot_automation import take_fullscreen_snip, screen_height, screen_width
+from .utils.image_inpainter import INPAINT_METHODS
 
 
 def process_pdf_to_ppt(pdf_path, png_dir, ppt_dir, delay_between_images=2, inpaint=True, dpi=150, timeout=50, display_height=None, 
-                    display_width=None, done_button_offset=None, capture_done_offset: bool = True, pages=None, update_offset_callback=None, stop_flag=None, force_regenerate=False):
+                    display_width=None, done_button_offset=None, capture_done_offset: bool = True, pages=None, update_offset_callback=None, stop_flag=None, force_regenerate=False, inpaint_method='background_smooth'):
     """
     将 PDF 转换为 PNG 图片，然后对每张图片进行截图处理
     
@@ -33,6 +34,7 @@ def process_pdf_to_ppt(pdf_path, png_dir, ppt_dir, delay_between_images=2, inpai
         update_offset_callback: 偏移更新回调函数
         stop_flag: 停止标志（用于中断转换）
         force_regenerate: 是否强制重新生成所有 PPT（默认 False，复用已存在的 PPT）
+        inpaint_method: 修复方法，可选值: background_smooth, edge_mean_smooth, background, onion, griddata, skimage
     """
     # 1. 将 PDF 转换为 PNG 图片
     print("=" * 60)
@@ -43,7 +45,7 @@ def process_pdf_to_ppt(pdf_path, png_dir, ppt_dir, delay_between_images=2, inpai
         print(f"错误: PDF 文件 {pdf_path} 不存在")
         return
     
-    png_names = pdf_to_png(pdf_path, png_dir, dpi=dpi, inpaint=inpaint, pages=pages)
+    png_names = pdf_to_png(pdf_path, png_dir, dpi=dpi, inpaint=inpaint, pages=pages, inpaint_method=inpaint_method, force_regenerate=force_regenerate)
     
     # 创建ppt输出目录
     ppt_dir.mkdir(exist_ok=True, parents=True)

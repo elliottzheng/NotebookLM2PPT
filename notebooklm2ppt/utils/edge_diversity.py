@@ -1,6 +1,5 @@
 import numpy as np
 
-
 def compute_edge_diversity_numpy(image_cv, left, top, right, bottom, tolerance=10):
     """
     使用 Numpy 替代 DBSCAN 计算边缘颜色一致性。
@@ -55,3 +54,30 @@ def compute_edge_diversity_numpy(image_cv, left, top, right, bottom, tolerance=1
     main_color = main_color.astype(np.uint8).tolist()
 
     return 1 - main_ratio, main_color
+
+def compute_edge_average_color(image_cv, left, top, right, bottom):
+    """
+    计算边缘的平均颜色。
+    """
+    left, top, right, bottom = round(left), round(top), round(right), round(bottom)
+    
+    h, w, _ = image_cv.shape
+    left = max(0, left); top = max(0, top)
+    right = min(w, right); bottom = min(h, bottom)
+
+    top_edge = image_cv[top:top+1, left:right]
+    bottom_edge = image_cv[bottom-1:bottom, left:right]
+    left_edge = image_cv[top:bottom, left:left+1]
+    right_edge = image_cv[top:bottom, right-1:right]
+    
+    edges = [top_edge, bottom_edge, left_edge, right_edge]
+    valid_edges = [e.reshape(-1, 3) for e in edges if e.size > 0]
+    
+    if not valid_edges:
+        return np.array([255, 255, 255])
+
+    flatten_points = np.concatenate(valid_edges, axis=0)
+    average_color = np.mean(flatten_points, axis=0)
+    average_color = average_color.astype(np.uint8).tolist()
+
+    return average_color

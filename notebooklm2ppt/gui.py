@@ -9,6 +9,7 @@ from .cli import process_pdf_to_ppt
 from .utils.ppt_combiner import combine_ppt, create_ppt_from_images
 from .utils.screenshot_automation import screen_width, screen_height
 from .utils.ppt_refiner import refine_ppt
+from .utils.image_inpainter import get_method_names, METHOD_ID_TO_NAME, get_method_name_from_id
 from .pdf2png import pdf_to_png
 import json
 import ctypes
@@ -98,6 +99,7 @@ class AppGUI:
         self.root.title(f"NotebookLM2PPT v{__version__} - PDF 转 PPT 工具")
         self.root.geometry("850x800")
         self.root.minsize(750, 800)
+        self.center_window()
         
         self.stop_flag = False
         
@@ -135,6 +137,20 @@ class AppGUI:
         sys.stdout = self.old_stdout
         sys.stderr = self.old_stderr
         self.root.destroy()
+
+    def center_window(self):
+        """将窗口居中显示"""
+        width = 850
+        height = 800
+        x = (self.root.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.root.winfo_screenheight() // 2) - (height // 2)
+        self.root.geometry(f'{width}x{height}+{x}+{y}')
+
+    def center_toplevel(self, window, width, height):
+        """将 Toplevel 窗口居中显示"""
+        x = (window.winfo_screenwidth() // 2) - (width // 2)
+        y = (window.winfo_screenheight() // 2) - (height // 2)
+        window.geometry(f'{width}x{height}+{x}+{y}')
 
     def add_context_menu(self, widget):
         """为输入框添加右键菜单（剪切、复制、粘贴、全选）"""
@@ -188,71 +204,81 @@ class AppGUI:
         opt_frame.pack(fill=tk.X, pady=5)
         opt_frame.columnconfigure(1, weight=1)
         opt_frame.columnconfigure(3, weight=1)
+        opt_frame.columnconfigure(5, weight=1)
 
+        # 第一行：DPI 和 等待时间
         ttk.Label(opt_frame, text="图片清晰度 (DPI):").grid(row=0, column=0, sticky=tk.W)
         self.dpi_var = tk.IntVar(value=150)
-        dpi_entry = ttk.Entry(opt_frame, textvariable=self.dpi_var, width=10)
+        dpi_entry = ttk.Entry(opt_frame, textvariable=self.dpi_var, width=8)
         dpi_entry.grid(row=0, column=1, sticky=tk.W, padx=5)
         self.add_context_menu(dpi_entry)
-        ttk.Label(opt_frame, text="（建议 150-300，越高越清晰）", foreground="gray").grid(row=0, column=2, sticky=tk.W, padx=5)
+        ttk.Label(opt_frame, text="（150-300）", foreground="gray").grid(row=0, column=2, sticky=tk.W, padx=5)
 
-        ttk.Label(opt_frame, text="等待时间 (秒):").grid(row=1, column=0, sticky=tk.W, pady=5)
+        ttk.Label(opt_frame, text="等待时间 (秒):").grid(row=0, column=3, sticky=tk.W, padx=(20, 0))
         self.delay_var = tk.IntVar(value=2)
-        delay_entry = ttk.Entry(opt_frame, textvariable=self.delay_var, width=10)
-        delay_entry.grid(row=1, column=1, sticky=tk.W, padx=5, pady=5)
+        delay_entry = ttk.Entry(opt_frame, textvariable=self.delay_var, width=8)
+        delay_entry.grid(row=0, column=4, sticky=tk.W, padx=5)
         self.add_context_menu(delay_entry)
-        ttk.Label(opt_frame, text="（每页加载后的等待时间）", foreground="gray").grid(row=1, column=2, sticky=tk.W, padx=5, pady=5)
+        ttk.Label(opt_frame, text="（每页加载后）", foreground="gray").grid(row=0, column=5, sticky=tk.W, padx=5)
 
-        ttk.Label(opt_frame, text="超时时间 (秒):").grid(row=2, column=0, sticky=tk.W, pady=5)
+        # 第二行：超时时间 和 窗口显示比例
+        ttk.Label(opt_frame, text="超时时间 (秒):").grid(row=1, column=0, sticky=tk.W, pady=5)
         self.timeout_var = tk.IntVar(value=50)
-        timeout_entry = ttk.Entry(opt_frame, textvariable=self.timeout_var, width=10)
-        timeout_entry.grid(row=2, column=1, sticky=tk.W, padx=5, pady=5)
+        timeout_entry = ttk.Entry(opt_frame, textvariable=self.timeout_var, width=8)
+        timeout_entry.grid(row=1, column=1, sticky=tk.W, padx=5, pady=5)
         self.add_context_menu(timeout_entry)
-        ttk.Label(opt_frame, text="（单页最大处理时间）", foreground="gray").grid(row=2, column=2, sticky=tk.W, padx=5, pady=5)
+        ttk.Label(opt_frame, text="（单页最大处理）", foreground="gray").grid(row=1, column=2, sticky=tk.W, padx=5, pady=5)
 
-        ttk.Label(opt_frame, text="窗口显示比例:").grid(row=3, column=0, sticky=tk.W, pady=5)
+        ttk.Label(opt_frame, text="窗口显示比例:").grid(row=1, column=3, sticky=tk.W, pady=5, padx=(20, 0))
         self.ratio_var = tk.DoubleVar(value=0.8)
-        ratio_entry = ttk.Entry(opt_frame, textvariable=self.ratio_var, width=10)
-        ratio_entry.grid(row=3, column=1, sticky=tk.W, padx=5, pady=5)
+        ratio_entry = ttk.Entry(opt_frame, textvariable=self.ratio_var, width=8)
+        ratio_entry.grid(row=1, column=4, sticky=tk.W, padx=5, pady=5)
         self.add_context_menu(ratio_entry)
-        ttk.Label(opt_frame, text="（建议 0.7-0.9）", foreground="gray").grid(row=3, column=2, sticky=tk.W, padx=5, pady=5)
+        ttk.Label(opt_frame, text="（建议 0.7-0.9）", foreground="gray").grid(row=1, column=5, sticky=tk.W, padx=5, pady=5)
 
+        # 第三行：去除水印 和 修复方法
         self.inpaint_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(opt_frame, text="去除水印（图像修复）", variable=self.inpaint_var).grid(row=4, column=0, columnspan=3, sticky=tk.W, pady=5)
+        ttk.Checkbutton(opt_frame, text="去除水印", variable=self.inpaint_var).grid(row=2, column=0, sticky=tk.W, pady=5)
 
+        ttk.Label(opt_frame, text="图像修复方法:").grid(row=2, column=1, sticky=tk.W, pady=5, padx=(10, 0))
+        self.inpaint_method_var = tk.StringVar(value=get_method_names()[0])
+        inpaint_method_combo = ttk.Combobox(opt_frame, textvariable=self.inpaint_method_var, width=16, state="readonly")
+        inpaint_method_combo['values'] = get_method_names()
+        inpaint_method_combo.grid(row=2, column=2, sticky=tk.W, padx=5, pady=5)
+        ttk.Button(opt_frame, text="说明", command=self.show_inpaint_method_info).grid(row=2, column=3, pady=5, padx=5)
+
+        # 第四行：仅图片模式 和 强制重新生成
         self.image_only_var = tk.BooleanVar(value=False)
         self.image_only_var.trace_add('write', self.on_image_only_changed)
-        ttk.Checkbutton(opt_frame, text="仅图片模式（跳过智能圈选，直接将去水印图片插入PPT，生成的PPT内容不可编辑）", variable=self.image_only_var).grid(row=5, column=0, columnspan=3, sticky=tk.W, pady=5)
+        ttk.Checkbutton(opt_frame, text="仅图片模式（跳过智能圈选，PPT不可编辑）", variable=self.image_only_var).grid(row=3, column=0, columnspan=3, sticky=tk.W, pady=5)
 
         self.force_regenerate_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(opt_frame, text="强制重新生成所有PPT页面（不勾选则复用已存在的 PPT）", variable=self.force_regenerate_var).grid(row=6, column=0, columnspan=3, sticky=tk.W, pady=5)
+        ttk.Checkbutton(opt_frame, text="强制重新生成所有页面", variable=self.force_regenerate_var).grid(row=3, column=3, columnspan=3, sticky=tk.W, pady=5, padx=(20, 0))
 
-        ttk.Separator(opt_frame, orient='horizontal').grid(row=7, column=0, columnspan=4, sticky="ew", pady=10)
-
-        ttk.Label(opt_frame, text="页码范围:").grid(row=8, column=0, sticky=tk.W, pady=5)
+        # 第五行：页码范围
+        ttk.Label(opt_frame, text="页码范围:").grid(row=4, column=0, sticky=tk.W, pady=5)
         self.page_range_var = tk.StringVar(value="")
-        page_range_entry = ttk.Entry(opt_frame, textvariable=self.page_range_var, width=30)
-        page_range_entry.grid(row=8, column=1, columnspan=2, sticky="ew", padx=5, pady=5)
+        page_range_entry = ttk.Entry(opt_frame, textvariable=self.page_range_var, width=20)
+        page_range_entry.grid(row=4, column=1, sticky="ew", padx=5, pady=5)
         self.add_context_menu(page_range_entry)
-        ttk.Label(opt_frame, text="留空=全部，示例: 1-3,5,7-9", foreground="gray").grid(row=8, column=3, sticky=tk.W, padx=5, pady=5)
+        ttk.Label(opt_frame, text="留空=全部，示例: 1-3,5,7-9", foreground="gray").grid(row=4, column=2, sticky=tk.W, padx=5, pady=5)
 
-        ttk.Separator(opt_frame, orient='horizontal').grid(row=9, column=0, columnspan=4, sticky="ew", pady=10)
-
-        ttk.Label(opt_frame, text="按钮偏移 (像素):").grid(row=10, column=0, sticky=tk.W, pady=5)
+        # 第六行：按钮偏移
+        ttk.Label(opt_frame, text="按钮偏移 (像素):").grid(row=5, column=0, sticky=tk.W, pady=5)
         self.done_offset_var = tk.StringVar(value="")
-        done_offset_entry = ttk.Entry(opt_frame, textvariable=self.done_offset_var, width=10)
-        done_offset_entry.grid(row=10, column=1, sticky=tk.W, padx=5, pady=5)
+        done_offset_entry = ttk.Entry(opt_frame, textvariable=self.done_offset_var, width=8)
+        done_offset_entry.grid(row=5, column=1, sticky=tk.W, padx=5, pady=5)
         self.add_context_menu(done_offset_entry)
         self.saved_offset_var = tk.StringVar(value="")
-        ttk.Label(opt_frame, textvariable=self.saved_offset_var, foreground="blue").grid(row=10, column=2, sticky=tk.W, padx=5)
-        
-        ttk.Label(opt_frame, text="⚠️ 核心参数：程序通过模拟鼠标点击'转换为PPT'按钮实现转换", foreground="red").grid(row=11, column=0, columnspan=4, sticky=tk.W)
-        ttk.Label(opt_frame, text='   如果无法准确定位按钮位置，核心功能将无法实现！可通过勾选"校准按钮位置"进行校准"', foreground="red").grid(row=12, column=0, columnspan=4, sticky=tk.W)
-        
+        ttk.Label(opt_frame, textvariable=self.saved_offset_var, foreground="blue").grid(row=5, column=2, sticky=tk.W, padx=5, pady=5)
+
         self.calibrate_var = tk.BooleanVar(value=True)
-        cb = ttk.Checkbutton(opt_frame, text="校准按钮位置", variable=self.calibrate_var)
-        cb.grid(row=13, column=0, columnspan=3, sticky=tk.W, pady=5)
-        ttk.Label(opt_frame, text="提示: 程序会自动保存校准结果，下次无需重复校准", foreground="red").grid(row=14, column=0, columnspan=4, sticky=tk.W)
+        ttk.Checkbutton(opt_frame, text="校准按钮位置", variable=self.calibrate_var).grid(row=6, column=0, columnspan=3, sticky=tk.W, pady=5)
+
+        # 提示信息
+        ttk.Label(opt_frame, text="⚠️ 核心参数：程序通过模拟鼠标点击'转换为PPT'按钮实现转换", foreground="red").grid(row=7, column=0, columnspan=6, sticky=tk.W)
+        ttk.Label(opt_frame, text="   如果无法准确定位按钮位置，核心功能将无法实现！可通过勾选'校准按钮位置'进行校准", foreground="red").grid(row=8, column=0, columnspan=6, sticky=tk.W)
+        ttk.Label(opt_frame, text="   提示: 程序会自动保存校准结果，下次无需重复校准", foreground="red").grid(row=9, column=0, columnspan=6, sticky=tk.W)
 
 
         # Control
@@ -361,6 +387,26 @@ class AppGUI:
             if not result:
                 self.image_only_var.set(False)
 
+    def show_inpaint_method_info(self):
+        from .utils.image_inpainter import INPAINT_METHODS
+        
+        info_lines = ["图像修复方法说明：\n"]
+        for method in INPAINT_METHODS:
+            info_lines.append(f"• {method['name']}\n  {method['description']}\n")
+        
+        info = "".join(info_lines)
+        
+        top = tk.Toplevel(self.root)
+        top.title("图像修复方法说明")
+        self.center_toplevel(top, 600, 400)
+        txt = scrolledtext.ScrolledText(top, wrap=tk.WORD, height=15)
+        txt.pack(fill=tk.BOTH, expand=True, padx=8, pady=(8,6))
+        txt.insert(tk.END, info)
+        txt.configure(state='disabled')
+        btn_frame = ttk.Frame(top)
+        btn_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=8, pady=6)
+        ttk.Button(btn_frame, text="关闭", command=top.destroy).pack(side=tk.LEFT, padx=6)
+
     def start_conversion(self):
         pdf_path = self.pdf_path_var.get().strip().strip('"')
         output_dir = self.output_dir_var.get().strip().strip('"')
@@ -383,6 +429,8 @@ class AppGUI:
         self.stop_btn.config(state=tk.DISABLED)
 
     def dump_config_to_disk(self):
+        current_method = self.inpaint_method_var.get()
+        
         config_data = {
             "output_dir": self.output_dir_var.get(),
             "dpi": self.dpi_var.get(),
@@ -390,6 +438,7 @@ class AppGUI:
             "timeout": self.timeout_var.get(),
             "ratio": self.ratio_var.get(),
             "inpaint": self.inpaint_var.get(),
+            "inpaint_method": current_method,
             "image_only": self.image_only_var.get(),
             "force_regenerate": self.force_regenerate_var.get(),
             "done_offset": self.done_offset_var.get(),
@@ -413,6 +462,10 @@ class AppGUI:
                 self.timeout_var.set(config_data.get("timeout", 50))
                 self.ratio_var.set(config_data.get("ratio", 0.8))
                 self.inpaint_var.set(config_data.get("inpaint", True))
+                
+                old_method = config_data.get("inpaint_method", get_method_names()[0])
+                self.inpaint_method_var.set(get_method_name_from_id(old_method))
+                
                 self.image_only_var.set(config_data.get("image_only", False))
                 self.force_regenerate_var.set(config_data.get("force_regenerate", False))
                 offset_value = config_data.get("done_offset", "")
@@ -458,15 +511,8 @@ class AppGUI:
         
         top = tk.Toplevel(self.root)
         top.title("欢迎使用")
-        top.geometry("500x300")
+        self.center_toplevel(top, 500, 300)
         top.resizable(False, False)
-        
-        top.update_idletasks()
-        width = top.winfo_width()
-        height = top.winfo_height()
-        x = (top.winfo_screenwidth() // 2) - (width // 2)
-        y = (top.winfo_screenheight() // 2) - (height // 2)
-        top.geometry(f'{width}x{height}+{x}+{y}')
         
         info_frame = ttk.Frame(top, padding="20")
         info_frame.pack(fill=tk.BOTH, expand=True)
@@ -533,7 +579,7 @@ class AppGUI:
         )
         top = tk.Toplevel(self.root)
         top.title("关于 MinerU")
-        top.geometry("640x360")
+        self.center_toplevel(top, 640, 360)
         txt = scrolledtext.ScrolledText(top, wrap=tk.WORD, height=12)
         txt.pack(fill=tk.BOTH, expand=True, padx=8, pady=(8,6))
         txt.insert(tk.END, info)
@@ -642,7 +688,9 @@ class AppGUI:
                     output_dir=png_dir,
                     dpi=self.dpi_var.get(),
                     inpaint=self.inpaint_var.get(),
-                    pages=pages_list
+                    pages=pages_list,
+                    inpaint_method=self.inpaint_method_var.get(),
+                    force_regenerate=self.force_regenerate_var.get()
                 )
                 
                 if self.stop_flag:
@@ -668,7 +716,8 @@ class AppGUI:
                     pages=pages_list,
                     update_offset_callback=self.update_offset_disk,
                     stop_flag=lambda: self.stop_flag,
-                    force_regenerate=self.force_regenerate_var.get()
+                    force_regenerate=self.force_regenerate_var.get(),
+                    inpaint_method=self.inpaint_method_var.get()
                 )
 
                 if self.stop_flag:

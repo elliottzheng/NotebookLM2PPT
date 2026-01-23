@@ -1,9 +1,9 @@
 import fitz  # PyMuPDF
 import os
 from pathlib import Path
-from .utils.image_inpainter import inpaint_image
+from .utils.image_inpainter import inpaint_image, INPAINT_METHODS
 
-def pdf_to_png(pdf_path, output_dir=None, dpi=150, inpaint=False, pages=None):
+def pdf_to_png(pdf_path, output_dir=None, dpi=150, inpaint=False, pages=None, inpaint_method='background_smooth', force_regenerate=False):
     """
     将 PDF 文件转换为多个 PNG 图片
     
@@ -11,6 +11,10 @@ def pdf_to_png(pdf_path, output_dir=None, dpi=150, inpaint=False, pages=None):
         pdf_path: PDF 文件路径
         output_dir: 输出目录，默认为 PDF 同目录的 pdf_name_pngs 文件夹
         dpi: 分辨率，默认 150
+        inpaint: 是否进行图像修复
+        pages: 要处理的页码范围
+        inpaint_method: 修复方法，可选值: background_smooth, edge_mean_smooth, background, onion, griddata, skimage
+        force_regenerate: 是否强制重新生成所有 PNG（默认 False，复用已存在的 PNG）
     """
     # 打开 PDF 文件
     pdf_doc = fitz.open(pdf_path)
@@ -49,13 +53,13 @@ def pdf_to_png(pdf_path, output_dir=None, dpi=150, inpaint=False, pages=None):
         
         png_names.append(output_path.name)
 
-        if os.path.exists(output_path):
+        if not force_regenerate and os.path.exists(output_path):
             print(f"跳过已存在的文件: {output_path}")
             continue
         pix.save(output_path)
         print(f"✓ 已保存: {output_path}")
         if inpaint:
-            inpaint_image(str(output_path), str(output_path))
+            inpaint_image(str(output_path), str(output_path), inpaint_method=inpaint_method)
             print(f"✓ 已修复: {output_path}")
 
         
