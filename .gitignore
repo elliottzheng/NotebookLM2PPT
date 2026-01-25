@@ -60,3 +60,8 @@ notebooklm2ppt*.spec
 config.json
 .claude
 upx.exe
+
+node_modules
+.vitepress/cache
+.vitepress/dist
+examples/compare_results/

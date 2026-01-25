@@ -70,7 +70,7 @@
   - **高质量图片替换**：从 MinerU JSON 中提取原始高清图片，替换基础转换中的截图图片，确保图像清晰度
   - **智能背景处理**：根据内容特征智能处理背景，实现最佳视觉效果
 
-> 💡 **想了解更多技术实现细节？** 请查看 [实现细节文档](docs/implementation-details.md)
+> 💡 **想了解更多技术实现细节？** 请查看 [实现细节文档](docs/implementation.md)
 
 ---
 
@@ -210,7 +210,7 @@ A: MinerU 目前看来是免费服务，只需要注册即可免费试用。
 A: 程序会尝试使用 JSON 信息，但可能导致优化效果不正确。请确保 JSON 文件与要转换的 PDF 完全对应。
 
 **Q: 想了解更多技术实现细节？**
-A: 请查看 [实现细节文档](docs/implementation-details.md) 和 [MinerU 技术实现细节文档](docs/mineru-technical-details.md)。
+A: 请查看 [实现细节文档](docs/implementation.md) 和 [MinerU 技术实现细节文档](docs/mineru.md)。
 
 ---
 

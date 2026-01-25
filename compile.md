@@ -9,4 +9,5 @@ pyinstaller -D -w -n notebooklm2ppt --optimize=2 main.py
 pyinstaller --clean -D -w -n notebooklm2ppt --optimize=2 --collect-all spire.presentation main.py
 
 python -m nuitka --standalone main.py
+git log -n 10 > log.txt
 ```
