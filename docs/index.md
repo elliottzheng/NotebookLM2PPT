@@ -4,7 +4,7 @@ layout: home
 hero:
   name: "NotebookLM2PPT"
   text: "让 NotebookLM 生成的演示文稿真正为你所用"
-  tagline: 从静态 PDF 到全可编辑PPT的智能转换工具
+  tagline: 从PDF到全可编辑PPT的智能转换工具
   actions:
     - theme: brand
       text: 快速开始
@@ -19,7 +19,7 @@ hero:
 features:
   - icon: 🤖
     title: 全自动化PDF转PPT
-    details: 集成微软电脑管家"智能圈选"，自动完成截图、识别、转换PPT和合并的全流程
+    details: 自动化微软电脑管家"智能圈选"完成截图、转换PPT和合并的全流程
   - icon: 🧠
     title: MinerU 深度优化
     details: 智能文本框筛选、字体统一、高质量图片替换、智能背景处理，进一步优化可编辑PPT质量
