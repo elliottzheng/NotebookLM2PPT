@@ -14,7 +14,8 @@ export default defineConfig({
       { text: '用户指南', items: [
         { text: '功能介绍', link: '/features' },
         { text: '快速开始', link: '/quickstart' },
-        { text: '使用教程', link: '/tutorial' }
+        { text: '使用教程', link: '/tutorial' },
+        { text: '样例对比', link: '/compare' }
       ]},
       { text: '技术文档', items: [
         { text: '工作原理', link: '/implementation' },
@@ -30,7 +31,8 @@ export default defineConfig({
           { text: '首页', link: '/' },
           { text: '功能介绍', link: '/features' },
           { text: '快速开始', link: '/quickstart' },
-          { text: '使用教程', link: '/tutorial' }
+          { text: '使用教程', link: '/tutorial' },
+          { text: '样例对比', link: '/compare' }
         ]
       },
       {
