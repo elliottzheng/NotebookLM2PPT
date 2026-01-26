@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "notebooklm2ppt"
-version = "0.6.4"
+version = "0.6.5"
 description = "将 PDF 转换为可编辑 PowerPoint 演示文稿的工具"
 readme = "README.md"
 requires-python = ">=3.8"
