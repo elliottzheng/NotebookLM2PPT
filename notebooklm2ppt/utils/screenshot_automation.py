@@ -67,7 +67,10 @@ def get_ppt_windows():
             window_text = win32gui.GetWindowText(hwnd)
             class_name = win32gui.GetClassName(hwnd)
             # PowerPoint 窗口类名通常为 "PPTFrameClass"
-            if "PPTFrameClass" in class_name or "PowerPoint" in window_text:
+            # WPS 演示窗口可能包含 "WPS Presentation" 或直接显示文件名
+            if ("PPTFrameClass" in class_name or
+                "PowerPoint" in window_text or
+                "WPS" in window_text):
                 results.append(hwnd)
         return True
     
@@ -77,25 +80,30 @@ def get_ppt_windows():
 
 def get_all_open_ppt_info():
     """获取所有打开的 PPT 文件信息：{文件名: 完整路径}"""
-    try:
+    info = {}
+    
         # 使用 win32com.client.Dispatch 并结合 GetActiveObject 的逻辑
         # 这种方式在处理已运行实例时更稳定
+    # 尝试 WPS Presentation (Kwpp.Application)
+    for prog_id in ("PowerPoint.Application", "Kwpp.Application"):
         try:
-            powerpoint = win32com.client.GetActiveObject("PowerPoint.Application")
-        except:
-            # 如果 GetActiveObject 失败，尝试直接 Dispatch
-            powerpoint = win32com.client.Dispatch("PowerPoint.Application")
-            
-        info = {}
-        for pres in powerpoint.Presentations:
             try:
-                # Name 通常是 "文件名.pptx"，FullName 是完整路径
-                info[pres.Name] = pres.FullName
-            except:
-                continue
-        return info
-    except Exception:
-        return {}
+                app = win32com.client.GetActiveObject(prog_id)
+            except Exception:
+                # 如果 GetActiveObject 失败，尝试直接 Dispatch
+                app = win32com.client.Dispatch(prog_id)
+
+            for pres in app.Presentations:
+                try:
+                    # Name 通常是 "文件名.pptx"，FullName 是完整路径
+                    info[pres.Name] = pres.FullName
+                    print(f"  {pres.Name} - {pres.FullName}")
+                except Exception:
+                    continue
+        except Exception:
+            continue
+
+    return info
 
 
 def get_all_open_ppt_paths():
