@@ -9,7 +9,7 @@ title: 快速开始
 ## 📋 系统要求
 
 - **操作系统**: Windows 10/11
-- **Microsoft PowerPoint**: 用于生成和合并幻灯片
+- **Microsoft PowerPoint 或 WPS**: 用于打开和编辑生成的 PPT 文件
 - **[微软电脑管家](https://pcmanager.microsoft.com/)**: 版本 ≥ 3.17.50.0
 
 ## 📦 安装方法

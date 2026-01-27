@@ -28,7 +28,7 @@
 | ![Basic](docs/public/page_0004_1_converted.jpg) | ![MinerU](docs/public/page_0004_2_converted.jpg) |
 | ![Basic](docs/public/page_0003_1_converted.jpg) | ![MinerU](docs/public/page_0003_2_converted.jpg) |
 
-> 💡 **效果惊人？** 查看 [详细对比](https://elliottzheng.github.io/NotebookLM2PPT/compare.html) 和 [基准测试数据](https://elliottzheng.github.io/NotebookLM2PPT/features.html#效果评估)。
+> 💡 **效果惊人？** 查看 [详细对比](https://elliottzheng.github.io/NotebookLM2PPT/compare.html) 和 [基准测试数据](https://elliottzheng.github.io/NotebookLM2PPT/features.html#%F0%9F%93%8A-%E6%95%88%E6%9E%9C%E8%AF%84%E4%BC%B0)。
 
 ---
 
