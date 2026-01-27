@@ -2,6 +2,7 @@ import { defineConfig } from 'vitepress'
 
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
+  base: '/NotebookLM2PPT/',
   srcDir: "docs",
   head: [['link', { rel: 'icon', href: '/favicon.ico' }]],
   title: "NotebookLM2PPT",
