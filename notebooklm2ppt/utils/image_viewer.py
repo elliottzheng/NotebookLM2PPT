@@ -24,7 +24,7 @@ def _get_screen_resolution():
         return 1920, 1080
 
 
-def show_image_fullscreen(image_path: str, display_height: int = None, stop_event=None, ready_event=None, stop_callback=None):
+def show_image_fullscreen(image_path: str, display_height: int = None, stop_event=None, ready_event=None, stop_callback=None,top_left=(0,0)):
     """
     显示图片在屏幕左上角
 
@@ -34,6 +34,7 @@ def show_image_fullscreen(image_path: str, display_height: int = None, stop_even
         stop_event: threading.Event对象，当设置时关闭窗口
         ready_event: threading.Event对象，当窗口准备好后设置此事件
         stop_callback: 可调用对象，按ESC键时会调用此回调函数来停止整个转换流程
+        top_left: 图片显示的左上角坐标，默认(0,0)
     """
     if not os.path.exists(image_path):
         raise FileNotFoundError(f"未找到图片: {image_path}")
@@ -59,30 +60,44 @@ def show_image_fullscreen(image_path: str, display_height: int = None, stop_even
         img = img.resize((new_w, new_h), Image.LANCZOS)
 
     # 创建稍大一些的图像并进行边缘填充 (Edge Padding)
-    # 仅在图片右侧和下方各扩展一小块区域（约20像素）
-    # 如果图片已经填满或超出屏幕，则不进行处理
-    if new_w < screen_w or new_h < screen_h:
-        pad = 20
-        target_w = min(screen_w, new_w + pad)
-        target_h = min(screen_h, new_h + pad)
+    # 填充四个方向，确保 top_left 区域和右侧/下方都没有黑边
+    if top_left[0] > 0 or top_left[1] > 0 or new_w < screen_w or new_h < screen_h:
+        # 目标是填充整个屏幕
+        target_w, target_h = screen_w, screen_h
 
         final_img = Image.new("RGB", (target_w, target_h))
-        final_img.paste(img, (0, 0))
+        # 将图片放置在计算后的位置
+        final_img.paste(img, (top_left[0], top_left[1]))
+
+        # 填充左侧
+        if top_left[0] > 0:
+            left_edge = img.crop((0, 0, 1, new_h))
+            left_pad = left_edge.resize((top_left[0], new_h), Image.NEAREST)
+            final_img.paste(left_pad, (0, top_left[1]))
 
         # 填充右侧
-        if new_w < target_w:
+        if top_left[0] + new_w < target_w:
             right_edge = img.crop((new_w - 1, 0, new_w, new_h))
-            right_pad = right_edge.resize((target_w - new_w, new_h), Image.NEAREST)
-            final_img.paste(right_pad, (new_w, 0))
+            right_pad = right_edge.resize((target_w - (top_left[0] + new_w), new_h), Image.NEAREST)
+            final_img.paste(right_pad, (top_left[0] + new_w, top_left[1]))
+
+        # 填充上方（使用已经填充了左右的行进行拉伸）
+        if top_left[1] > 0:
+            top_line = final_img.crop((0, top_left[1], target_w, top_left[1] + 1))
+            top_pad = top_line.resize((target_w, top_left[1]), Image.NEAREST)
+            final_img.paste(top_pad, (0, 0))
 
         # 填充下方
-        if new_h < target_h:
-            # 从 final_img 获取最后一行（包含可能已填充的右侧部分）
-            bottom_edge = final_img.crop((0, new_h - 1, target_w, new_h))
-            bottom_pad = bottom_edge.resize((target_w, target_h - new_h), Image.NEAREST)
-            final_img.paste(bottom_pad, (0, new_h))
+        if top_left[1] + new_h < target_h:
+            bottom_line = final_img.crop((0, top_left[1] + new_h - 1, target_w, top_left[1] + new_h))
+            bottom_pad = bottom_line.resize((target_w, target_h - (top_left[1] + new_h)), Image.NEAREST)
+            final_img.paste(bottom_pad, (0, top_left[1] + new_h))
 
         img = final_img
+        # 由于已经将图片处理为包含偏移的全屏图像，后续绘图坐标设为 (0,0)
+        draw_x, draw_y = 0, 0
+    else:
+        draw_x, draw_y = top_left[0], top_left[1]
 
     # 检查是否已有Tkinter root，如果有则使用Toplevel，否则创建新的Tk
     is_toplevel = False
@@ -118,8 +133,8 @@ def show_image_fullscreen(image_path: str, display_height: int = None, stop_even
     tk_image = ImageTk.PhotoImage(img)
 
     # 在画布左上角显示图片（不居中）
-    # 图片锚点设置为左上角(nw=northwest)，坐标为(0, 0)
-    imagesprite = canvas.create_image(0, 0, anchor='nw', image=tk_image)
+    # 图片锚点设置为左上角(nw=northwest)，坐标为(draw_x, draw_y)
+    imagesprite = canvas.create_image(draw_x, draw_y, anchor='nw', image=tk_image)
 
     # 保持对图片的引用，防止被垃圾回收
     canvas.image = tk_image

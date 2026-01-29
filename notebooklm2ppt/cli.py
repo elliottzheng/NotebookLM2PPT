@@ -10,12 +10,13 @@ from pathlib import Path
 from .pdf2png import pdf_to_png
 from .utils.image_viewer import show_image_fullscreen
 from .utils.screenshot_automation import take_fullscreen_snip, screen_height, screen_width
+from .utils.coordinate_utils import get_effective_top_left
 from .utils.image_inpainter import INPAINT_METHODS
 from .i18n import get_text
 
 
 def process_pdf_to_ppt(pdf_path, png_dir, ppt_dir, delay_between_images=2, inpaint=True, dpi=150, timeout=50, display_height=None, 
-                    display_width=None, done_button_offset=None, capture_done_offset: bool = True, pages=None, update_offset_callback=None, stop_flag=None, force_regenerate=False, inpaint_method='background_smooth'):
+                    display_width=None, done_button_offset=None, capture_done_offset: bool = True, pages=None, update_offset_callback=None, stop_flag=None, force_regenerate=False, inpaint_method='background_smooth', top_left=(0, 0)):
     """
     将 PDF 转换为 PNG 图片，然后对每张图片进行截图处理
     
@@ -36,6 +37,7 @@ def process_pdf_to_ppt(pdf_path, png_dir, ppt_dir, delay_between_images=2, inpai
         stop_flag: 停止标志（用于中断转换）
         force_regenerate: 是否强制重新生成所有 PPT（默认 False，复用已存在的 PPT）
         inpaint_method: 修复方法，可选值: background_smooth, edge_mean_smooth, background, onion, griddata, skimage
+        top_left: 截图区域的左上角坐标 (x, y)
     """
     # 1. 将 PDF 转换为 PNG 图片
     print("=" * 60)
@@ -73,7 +75,9 @@ def process_pdf_to_ppt(pdf_path, png_dir, ppt_dir, delay_between_images=2, inpai
     if display_width is None:
         display_width = screen_width
     
-    print(f"显示窗口尺寸: {display_width} x {display_height}")
+    # 预计算实际生效的 top_left 坐标，确保后续所有组件使用的坐标完全一致
+    effective_top_left = get_effective_top_left(top_left, display_width, display_height)
+    print(f"显示窗口尺寸: {display_width} x {display_height}, 实际偏移: {effective_top_left}")
 
     # 创建一个本地停止标志，用于响应ESC键
     esc_stop_requested = [False]  # 使用列表以便在嵌套函数中修改
@@ -81,7 +85,7 @@ def process_pdf_to_ppt(pdf_path, png_dir, ppt_dir, delay_between_images=2, inpai
     # 创建组合停止标志函数，同时检查外层stop_flag和ESC键停止请求
     def combined_stop_flag():
         return (stop_flag and stop_flag()) or esc_stop_requested[0]
-
+    
     # 3. 对每张图片进行截图处理
     for idx, png_file in enumerate(png_files, 1):
         if combined_stop_flag():
@@ -115,8 +119,8 @@ def process_pdf_to_ppt(pdf_path, png_dir, ppt_dir, delay_between_images=2, inpai
             """在线程中显示图片"""
             # 传入stop_event、ready_event和stop_callback
             show_image_fullscreen(str(png_file), display_height=display_height,
-                                 stop_event=stop_event, ready_event=ready_event,
-                                 stop_callback=on_stop_requested)
+                                stop_event=stop_event, ready_event=ready_event,
+                                stop_callback=on_stop_requested, top_left=effective_top_left)
 
         # 启动图片显示线程
         viewer_thread = threading.Thread(
@@ -152,7 +156,8 @@ def process_pdf_to_ppt(pdf_path, png_dir, ppt_dir, delay_between_images=2, inpai
                 done_button_right_offset=done_button_offset,
                 stop_flag=combined_stop_flag,
                 calibration_title=get_text("calibration_dialog_title"),
-                calibration_msg=get_text("calibration_dialog_msg")
+                calibration_msg=get_text("calibration_dialog_msg"),
+                top_left=effective_top_left
             )
             if combined_stop_flag():
                 print("\n⏹️ 用户请求停止转换")
@@ -210,9 +215,9 @@ def process_pdf_to_ppt(pdf_path, png_dir, ppt_dir, delay_between_images=2, inpai
                 print(f"✓ 图片 {png_file.name} 处理完成，但未获取到PPT文件名")
             else:
                 print(f"⚠ 图片 {png_file.name} 已截图，但未检测到新的PPT窗口")
-                # 延迟导入 pywinauto，避免在模块加载时就导入（会与主 GUI 冲突）
+                # 使用预计算好的 effective_top_left 定位关闭按钮
                 from pywinauto import mouse
-                close_button = (display_width - 35, display_height + 35)
+                close_button = (effective_top_left[0] + display_width - 35, effective_top_left[1] + display_height + 35)
                 mouse.click(button='left', coords=close_button)
         except Exception as e:
             print(f"✗ 处理图片 {png_file.name} 时出错: {e}")

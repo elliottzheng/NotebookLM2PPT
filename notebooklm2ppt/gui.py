@@ -107,6 +107,7 @@ class AppGUI:
     def __init__(self, root):
         self.root = root
         self.lang = "zh_cn"  # Default
+        self.top_left = (10, 10)
         self.load_config_from_disk()
         set_language(self.lang)
         
@@ -866,6 +867,7 @@ class AppGUI:
             out_ppt_file = workspace_dir / f"{pdf_name}{page_suffix}.pptx"
             
             method_id = self.get_method_id_from_translated_name(self.inpaint_method_var.get())
+
             
             if self.image_only_var.get():
                 print("=" * 60)
@@ -906,7 +908,8 @@ class AppGUI:
                     update_offset_callback=self.update_offset_disk,
                     stop_flag=lambda: self.stop_flag,
                     force_regenerate=self.force_regenerate_var.get(),
-                    inpaint_method=method_id
+                    inpaint_method=method_id,
+                    top_left=self.top_left
                 )
 
                 if self.stop_flag:
@@ -1462,7 +1465,8 @@ class AppGUI:
                     update_offset_callback=self.update_offset_disk,
                     stop_flag=lambda: self.queue_stop_flag,
                     force_regenerate=force_regenerate,
-                    inpaint_method=method_id
+                    inpaint_method=method_id,
+                    top_left=self.top_left
                 )
                 if self.queue_stop_flag:
                     return False, None

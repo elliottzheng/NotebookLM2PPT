@@ -391,6 +391,7 @@ def take_fullscreen_snip(
     stop_flag=None,
     calibration_title: str = "Tip",
     calibration_msg: str = "Calibration in progress...",
+    top_left: tuple[int, int] = (0, 0),
 ):
     """使用微软电脑管家的智能圈选功能进行全屏截图。
 
@@ -462,15 +463,15 @@ def take_fullscreen_snip(
         return False, None, None
 
     # Define key points for the snip and confirmation click.
-    # top_left = (5, 5)
-    top_left = (0,0)
     # delta = 4  # Small offset to ensure full coverage
     delta = int(width / 512 * 4)
-    bottom_right = (width+delta, height)
+    # 计算绝对坐标
+    abs_width = width + top_left[0]
+    abs_height = height + top_left[1]
 
-    center = (width // 2, height // 2)
+    bottom_right = (abs_width + delta, abs_height)
 
-    print(bottom_right, width)
+    print(f"截图区域: {top_left} -> {bottom_right}, 原始宽度: {width}")
 
     # Perform the drag operation
     # Move to start position
@@ -482,9 +483,6 @@ def take_fullscreen_snip(
     # Wait for the duration to simulate the drag time
 
     time.sleep(0)
-    
-
-
     # Release left button
     mouse.release(button='left', coords=bottom_right)
 
@@ -493,10 +491,6 @@ def take_fullscreen_snip(
         return False, None, None
 
     if resolved_offset is None:
-        
-
-        
-        
         coords = _wait_for_left_click(timeout=60, stop_flag=stop_flag)
         if coords:
             click_x, click_y = coords
@@ -508,9 +502,9 @@ def take_fullscreen_snip(
             return False, None, None
     else:
         # 已有偏移，执行自动点击
-        done_button = (bottom_right[0] - resolved_offset, height + 35)
+        done_button = (bottom_right[0] - resolved_offset, abs_height + 35)
         if done_button[1] > screen_height:
-            done_button = (done_button[0], height - 35)
+            done_button = (done_button[0], abs_height - 35)
         mouse.move(coords=done_button)
         time.sleep(0)
         mouse.click(button='left', coords=done_button)
