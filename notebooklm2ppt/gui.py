@@ -18,6 +18,7 @@ import webbrowser
 from . import __version__
 from .i18n import get_text, SUPPORTED_LANGUAGES, set_language
 from .utils.process_checker import is_process_running, PROCESS_NAME
+from .config_defaults import DEFAULT_TASK_SETTINGS, DEFAULT_AUTOMATION_SETTINGS, get_default_settings
 
 MINERU_URL = "https://mineru.net/"
 GITHUB_URL = "https://github.com/elliottzheng/NotebookLM2PPT"
@@ -510,13 +511,26 @@ class AppGUI:
 
 
     def dump_config_to_disk(self):
-        config_data = {
+        # 首先读取现有的配置，保留 hide_startup_dialog 等其他字段
+        try:
+            if CONFIG_FILE.exists():
+                with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                    config_data = json.load(f)
+            else:
+                config_data = {}
+        except Exception:
+            config_data = {}
+        
+        # 更新需要保存的字段
+        config_data.update({
             "language": self.lang,
             "output_dir": self.output_dir_var.get(),
             "delay": self.delay_var.get(),
             "timeout": self.timeout_var.get(),
             "done_offset": self.done_offset_var.get(),
-        }
+            # 保存用户上次使用的任务设置（仅保存用户可能修改的值）
+            "last_task_settings": getattr(self, 'last_task_settings', {})
+        })
         try:
             with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
                 json.dump(config_data, f, ensure_ascii=False, indent=4)
@@ -527,10 +541,13 @@ class AppGUI:
     def load_config_from_disk(self):
         try:
             if not CONFIG_FILE.exists():
+                self.last_task_settings = {}  # 初始化为空字典
                 return
             with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
                 config_data = json.load(f)
                 self.lang = config_data.get("language", "zh_cn")
+                # 加载用户上次使用的任务设置
+                self.last_task_settings = config_data.get("last_task_settings", {})
                 if hasattr(self, 'output_dir_var'):
                     self.output_dir_var.set(config_data.get("output_dir", "workspace"))
                     self.delay_var.set(config_data.get("delay", 0))
@@ -815,19 +832,17 @@ class AppGUI:
     def add_task_with_settings(self, pdf_path, json_path=None, settings=None):
         """添加任务，使用指定的设置"""
         if settings is None:
-            # 如果没有提供设置，使用默认值
-            settings = {
-                "output_dir": self.output_dir_var.get().strip().strip('"'),
-                "dpi": 150,
-                "ratio": 0.8,
-                "inpaint": True,
-                "inpaint_method": self.get_translated_method_names()[0],
-                "image_only": False,
-                "force_regenerate": False,
-                "unify_font": False,
-                "font_name": "Calibri",
-                "page_range": ""
-            }
+            # 如果没有提供设置，使用用户上次的设置（如果有的话）
+            settings = get_default_settings(
+                output_dir=self.output_dir_var.get().strip().strip('"'),
+                inpaint_method=self.get_translated_method_names()[0],
+                user_last_settings=getattr(self, 'last_task_settings', {})
+            )
+        else:
+            # 保存用户这次使用的设置（排除动态参数）
+            self.last_task_settings = {k: v for k, v in settings.items() 
+                                       if k not in ['output_dir', 'page_range']}
+            self.dump_config_to_disk()  # 立即保存到配置文件
 
         # 检查是否已存在相同 PDF 的任务
         for task in self.task_queue:
@@ -861,18 +876,11 @@ class AppGUI:
 
     def add_task(self, pdf_path, json_path=None):
         """添加任务（使用默认设置）"""
-        settings = {
-            "output_dir": self.output_dir_var.get().strip().strip('"'),
-            "dpi": 150,
-            "ratio": 0.8,
-            "inpaint": True,
-            "inpaint_method": self.get_translated_method_names()[0],
-            "image_only": False,
-            "force_regenerate": False,
-            "unify_font": False,
-            "font_name": "Calibri",
-            "page_range": ""
-        }
+        settings = get_default_settings(
+            output_dir=self.output_dir_var.get().strip().strip('"'),
+            inpaint_method=self.get_translated_method_names()[0],
+            user_last_settings=getattr(self, 'last_task_settings', {})
+        )
 
         # 检查是否已存在相同 PDF 的任务
         for task in self.task_queue:
@@ -938,6 +946,10 @@ class AppGUI:
         ttk.Button(file_frame, text="浏览...", command=browse_json, width=8).grid(row=1, column=2, padx=5, pady=8)
         ttk.Button(file_frame, text="说明", command=self.show_mineru_info, width=6).grid(row=1, column=3, padx=2, pady=8)
 
+        # 获取用户上次使用的设置作为对话框的初始值
+        last_settings = getattr(self, 'last_task_settings', {})
+        ttk.Button(file_frame, text="说明", command=self.show_mineru_info, width=6).grid(row=1, column=3, padx=2, pady=8)
+
         # 为整个对话框窗口添加拖拽功能
         if windnd:
             def on_dialog_drop(files):
@@ -983,46 +995,52 @@ class AppGUI:
 
         # 第一行：DPI 和 显示比例
         ttk.Label(param_frame, text="DPI:").grid(row=0, column=0, sticky=tk.W, pady=8)
-        dpi_var = tk.IntVar(value=150)
+        dpi_var = tk.IntVar(value=last_settings.get('dpi', DEFAULT_TASK_SETTINGS['dpi']))
         dpi_entry = ttk.Entry(param_frame, textvariable=dpi_var, width=8)
         dpi_entry.grid(row=0, column=1, sticky=tk.W, padx=5, pady=8)
         ttk.Label(param_frame, text="(150-300)", foreground="gray").grid(row=0, column=2, sticky=tk.W, padx=10)
 
         ttk.Label(param_frame, text="显示比例:").grid(row=0, column=3, sticky=tk.W, padx=(20, 0))
-        ratio_var = tk.DoubleVar(value=0.8)
+        ratio_var = tk.DoubleVar(value=last_settings.get('ratio', DEFAULT_TASK_SETTINGS['ratio']))
         ratio_entry = ttk.Entry(param_frame, textvariable=ratio_var, width=8)
         ratio_entry.grid(row=0, column=4, sticky=tk.W, padx=5, pady=8)
         ttk.Label(param_frame, text="(0.7-0.9)", foreground="gray").grid(row=0, column=5, sticky=tk.W, padx=5)
 
         # 第二行：去除水印 和 修复方法
-        inpaint_var = tk.BooleanVar(value=True)
+        inpaint_var = tk.BooleanVar(value=last_settings.get('inpaint', DEFAULT_TASK_SETTINGS['inpaint']))
         ttk.Checkbutton(param_frame, text="去除水印", variable=inpaint_var).grid(row=1, column=0, sticky=tk.W, pady=8)
 
         ttk.Label(param_frame, text="修复方法:").grid(row=1, column=2, sticky=tk.W, padx=10)
-        inpaint_method_var = tk.StringVar(value=self.get_translated_method_names()[0])
+        # 使用上次的修复方法（如果有）
+        last_method_id = last_settings.get('inpaint_method', '')
+        try:
+            last_method_translated = self.get_translated_name_from_id(last_method_id) if last_method_id else self.get_translated_method_names()[0]
+        except:
+            last_method_translated = self.get_translated_method_names()[0]
+        inpaint_method_var = tk.StringVar(value=last_method_translated)
         inpaint_method_combo = ttk.Combobox(param_frame, textvariable=inpaint_method_var, width=20, state="readonly")
         inpaint_method_combo['values'] = self.get_translated_method_names()
         inpaint_method_combo.grid(row=1, column=3, columnspan=2, sticky=tk.W, padx=5, pady=8)
         ttk.Button(param_frame, text="说明", command=self.show_inpaint_method_info, width=6).grid(row=1, column=5, padx=5, pady=8)
 
         # 第三行：仅图片模式 和 强制重新生成
-        image_only_var = tk.BooleanVar(value=False)
+        image_only_var = tk.BooleanVar(value=last_settings.get('image_only', DEFAULT_TASK_SETTINGS['image_only']))
         ttk.Checkbutton(param_frame, text="仅图片模式", variable=image_only_var).grid(row=2, column=0, columnspan=3, sticky=tk.W, pady=8)
 
-        force_regenerate_var = tk.BooleanVar(value=False)
+        force_regenerate_var = tk.BooleanVar(value=last_settings.get('force_regenerate', DEFAULT_TASK_SETTINGS['force_regenerate']))
         ttk.Checkbutton(param_frame, text="强制重新生成", variable=force_regenerate_var).grid(row=2, column=3, columnspan=3, sticky=tk.W, pady=8)
 
         # 第四行：页码范围
         ttk.Label(param_frame, text="页码范围:").grid(row=3, column=0, sticky=tk.W, pady=8)
-        page_range_var = tk.StringVar(value="")
+        page_range_var = tk.StringVar(value="")  # 页码范围不保存
         page_range_entry = ttk.Entry(param_frame, textvariable=page_range_var, width=20)
         page_range_entry.grid(row=3, column=1, columnspan=2, sticky=tk.W, padx=5, pady=8)
         ttk.Label(param_frame, text="例: 1-3,5", foreground="gray").grid(row=3, column=3, columnspan=2, sticky=tk.W, padx=10)
 
         # 第五行：统一字体选项（仅当有 JSON 时显示）
         font_frame = ttk.Frame(param_frame)
-        unify_font_var = tk.BooleanVar(value=False)
-        font_name_var = tk.StringVar(value="Calibri")
+        unify_font_var = tk.BooleanVar(value=last_settings.get('unify_font', DEFAULT_TASK_SETTINGS['unify_font']))
+        font_name_var = tk.StringVar(value=last_settings.get('font_name', DEFAULT_TASK_SETTINGS['font_name']))
         
         unify_check = ttk.Checkbutton(font_frame, text="统一字体", variable=unify_font_var)
         unify_check.pack(side=tk.LEFT)
@@ -1062,7 +1080,7 @@ class AppGUI:
                 "dpi": dpi_var.get(),
                 "ratio": ratio_var.get(),
                 "inpaint": inpaint_var.get(),
-                "inpaint_method": inpaint_method_var.get(),
+                "inpaint_method": self.get_method_id_from_translated_name(inpaint_method_var.get()),  # 保存方法 ID
                 "image_only": image_only_var.get(),
                 "force_regenerate": force_regenerate_var.get(),
                 "unify_font": unify_font_var.get(),
@@ -1434,6 +1452,9 @@ class AppGUI:
         main_frame = ttk.Frame(param_top)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
+        # 获取用户上次使用的设置作为批量任务的初始值
+        last_settings = getattr(self, 'last_task_settings', {})
+        
         # 任务参数区域 - 使用 Canvas 支持滚动
         param_container = ttk.Frame(main_frame)
         param_container.pack(fill=tk.BOTH, expand=True)
@@ -1459,46 +1480,52 @@ class AppGUI:
 
         # 第一行：DPI 和 显示比例
         ttk.Label(param_frame, text="DPI:").grid(row=0, column=0, sticky=tk.W, pady=8)
-        dpi_var = tk.IntVar(value=150)
+        dpi_var = tk.IntVar(value=last_settings.get('dpi', DEFAULT_TASK_SETTINGS['dpi']))
         dpi_entry = ttk.Entry(param_frame, textvariable=dpi_var, width=8)
         dpi_entry.grid(row=0, column=1, sticky=tk.W, padx=5, pady=8)
         ttk.Label(param_frame, text="(150-300)", foreground="gray").grid(row=0, column=2, sticky=tk.W, padx=10)
 
         ttk.Label(param_frame, text="显示比例:").grid(row=0, column=3, sticky=tk.W, padx=(20, 0))
-        ratio_var = tk.DoubleVar(value=0.8)
+        ratio_var = tk.DoubleVar(value=last_settings.get('ratio', DEFAULT_TASK_SETTINGS['ratio']))
         ratio_entry = ttk.Entry(param_frame, textvariable=ratio_var, width=8)
         ratio_entry.grid(row=0, column=4, sticky=tk.W, padx=5, pady=8)
         ttk.Label(param_frame, text="(0.7-0.9)", foreground="gray").grid(row=0, column=5, sticky=tk.W, padx=5)
 
         # 第二行：去除水印 和 修复方法
-        inpaint_var = tk.BooleanVar(value=True)
+        inpaint_var = tk.BooleanVar(value=last_settings.get('inpaint', DEFAULT_TASK_SETTINGS['inpaint']))
         ttk.Checkbutton(param_frame, text="去除水印", variable=inpaint_var).grid(row=1, column=0, sticky=tk.W, pady=8)
 
         ttk.Label(param_frame, text="修复方法:").grid(row=1, column=2, sticky=tk.W, padx=10)
-        inpaint_method_var = tk.StringVar(value=self.get_translated_method_names()[0])
+        # 使用上次的修复方法
+        last_method_id = last_settings.get('inpaint_method', '')
+        try:
+            last_method_translated = self.get_translated_name_from_id(last_method_id) if last_method_id else self.get_translated_method_names()[0]
+        except:
+            last_method_translated = self.get_translated_method_names()[0]
+        inpaint_method_var = tk.StringVar(value=last_method_translated)
         inpaint_method_combo = ttk.Combobox(param_frame, textvariable=inpaint_method_var, width=20, state="readonly")
         inpaint_method_combo['values'] = self.get_translated_method_names()
         inpaint_method_combo.grid(row=1, column=3, columnspan=2, sticky=tk.W, padx=5, pady=8)
         ttk.Button(param_frame, text="说明", command=self.show_inpaint_method_info, width=6).grid(row=1, column=5, padx=5, pady=8)
 
         # 第三行：仅图片模式 和 强制重新生成
-        image_only_var = tk.BooleanVar(value=False)
+        image_only_var = tk.BooleanVar(value=last_settings.get('image_only', DEFAULT_TASK_SETTINGS['image_only']))
         ttk.Checkbutton(param_frame, text="仅图片模式", variable=image_only_var).grid(row=2, column=0, columnspan=3, sticky=tk.W, pady=8)
 
-        force_regenerate_var = tk.BooleanVar(value=False)
+        force_regenerate_var = tk.BooleanVar(value=last_settings.get('force_regenerate', DEFAULT_TASK_SETTINGS['force_regenerate']))
         ttk.Checkbutton(param_frame, text="强制重新生成", variable=force_regenerate_var).grid(row=2, column=3, columnspan=3, sticky=tk.W, pady=8)
 
         # 第四行：页码范围
         ttk.Label(param_frame, text="页码范围:").grid(row=3, column=0, sticky=tk.W, pady=8)
-        page_range_var = tk.StringVar(value="")
+        page_range_var = tk.StringVar(value="")  # 批量任务不保存页码范围
         page_range_entry = ttk.Entry(param_frame, textvariable=page_range_var, width=20)
         page_range_entry.grid(row=3, column=1, columnspan=2, sticky=tk.W, padx=5, pady=8)
         ttk.Label(param_frame, text="例: 1-3,5", foreground="gray").grid(row=3, column=3, columnspan=2, sticky=tk.W, padx=10)
 
         # 第五行：统一字体选项
         font_frame = ttk.Frame(param_frame)
-        unify_font_var = tk.BooleanVar(value=False)
-        font_name_var = tk.StringVar(value="Calibri")
+        unify_font_var = tk.BooleanVar(value=last_settings.get('unify_font', DEFAULT_TASK_SETTINGS['unify_font']))
+        font_name_var = tk.StringVar(value=last_settings.get('font_name', DEFAULT_TASK_SETTINGS['font_name']))
         
         unify_check = ttk.Checkbutton(font_frame, text="统一字体", variable=unify_font_var)
         unify_check.pack(side=tk.LEFT)
@@ -1521,7 +1548,7 @@ class AppGUI:
                 "dpi": dpi_var.get(),
                 "ratio": ratio_var.get(),
                 "inpaint": inpaint_var.get(),
-                "inpaint_method": inpaint_method_var.get(),
+                "inpaint_method": self.get_method_id_from_translated_name(inpaint_method_var.get()),  # 保存方法 ID
                 "image_only": image_only_var.get(),
                 "force_regenerate": force_regenerate_var.get(),
                 "unify_font": unify_font_var.get(),
@@ -1906,18 +1933,10 @@ class AppGUI:
             settings = {}
         
         # 为旧任务提供默认值
-        default_settings = {
-            "output_dir": self.output_dir_var.get() if hasattr(self, 'output_dir_var') else "workspace",
-            "dpi": 150,
-            "ratio": 0.8,
-            "inpaint": True,
-            "inpaint_method": "background_smooth",
-            "image_only": False,
-            "force_regenerate": False,
-            "unify_font": False,
-            "font_name": "Calibri",
-            "page_range": ""
-        }
+        default_settings = get_default_settings(
+            output_dir=self.output_dir_var.get() if hasattr(self, 'output_dir_var') else "workspace",
+            inpaint_method="background_smooth"
+        )
         # 合并默认值和实际值
         for key, default_val in default_settings.items():
             if key not in settings or settings[key] is None:
@@ -2169,7 +2188,7 @@ class AppGUI:
             inpaint_method = settings.get("inpaint_method", self.get_translated_method_names()[0] if hasattr(self, 'get_translated_method_names') else "background_smooth")
             image_only = settings.get("image_only", False)
             force_regenerate = settings.get("force_regenerate", False)
-            unify_font = settings.get("unify_font", False)
+            unify_font = settings.get("unify_font", True)
             font_name = settings.get("font_name", "Calibri")
             page_range = settings.get("page_range", "")
             

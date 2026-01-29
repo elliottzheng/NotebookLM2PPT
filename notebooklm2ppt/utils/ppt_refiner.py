@@ -7,6 +7,7 @@ from spire.presentation.common import *
 from spire.presentation import *
 from .ppt_combiner import clean_ppt
 from .edge_diversity import compute_edge_diversity_numpy
+from ..config_defaults import DEFAULT_TASK_SETTINGS
 
 def recursive_blocks(blocks):
     result = []
@@ -92,7 +93,12 @@ def get_indices_from_png_names(png_names):
     return indices
 
 
-def refine_ppt(tmp_image_dir, json_file, ppt_file, png_dir, png_files, final_out_ppt_file, unify_font=False, font_name="Calibri"):
+def refine_ppt(tmp_image_dir, json_file, ppt_file, png_dir, png_files, final_out_ppt_file, unify_font=None, font_name=None):
+    # 使用默认配置中的值
+    if unify_font is None:
+        unify_font = DEFAULT_TASK_SETTINGS["unify_font"]
+    if font_name is None:
+        font_name = DEFAULT_TASK_SETTINGS["font_name"]
     png_files = [os.path.join(png_dir, name) for name in png_files]
     indices = get_indices_from_png_names(png_files)
     os.makedirs(tmp_image_dir, exist_ok=True)
