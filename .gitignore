@@ -65,3 +65,5 @@ node_modules
 .vitepress/cache
 .vitepress/dist
 examples/compare_results/
+output/
+.local/

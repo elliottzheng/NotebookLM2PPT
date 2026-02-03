@@ -1,5 +1,4 @@
 PyMuPDF
-opencv-python
 numpy
 requests
 spire.presentation
@@ -8,5 +7,5 @@ pywin32
 pywinauto
 scikit-image
 Pillow
-pyinpaint
 windnd
+python-dotenv
